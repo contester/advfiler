@@ -57,11 +57,106 @@ func (f *filerServer) uploadChunk(buf []byte) (string, error) {
 	return ar.Fid, nil
 }
 
-func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) {
+type lookupData struct {
+	Locations []struct {
+		PublicUrl string `json:"publicUrl"`
+		Url       string `json:"url"`
+	} `json:"locations"`
+}
+
+func lookupVolUrl(weedMaster, fid string) (string, error) {
+	resp, err := http.Get(weedMaster + "/dir/lookup?volumeId=" + fid) // fixme
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var ld lookupData
+	if err = json.NewDecoder(resp.Body).Decode(&ld); err != nil {
+		return "", err
+	}
+	return ld.Locations[0].Url, nil
+}
+
+type redisFileInfo struct {
+	Name   string
+	Chunks []string
+}
+
+func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request) error {
+	path := r.URL.Path
+	st := f.redisClient.Get("fs/" + path)
+	if st.Err() != nil {
+		return st.Err()
+	}
+	ust, err := st.Bytes()
+	if err != nil {
+		return err
+	}
+	var fi redisFileInfo
+	if err = json.Unmarshal(ust, &fi); err != nil {
+		return err
+	}
+
+	for _, ch := range fi.Chunks {
+		volurl, err := lookupVolUrl(f.weedMaster, ch)
+		if err != nil {
+			return err
+		}
+		resp, err := http.Get("http://" + volurl + "/" + ch)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request) error {
+	path := r.URL.Path
+	st := f.redisClient.Get("fs/" + path)
+	if st.Err() != nil {
+		return st.Err()
+	}
+	ust, err := st.Bytes()
+	if err != nil {
+		return err
+	}
+	var fi redisFileInfo
+	if err = json.Unmarshal(ust, &fi); err != nil {
+		return err
+	}
+
+	for _, ch := range fi.Chunks {
+		volurl, err := lookupVolUrl(f.weedMaster, ch)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequest("DELETE", "http://"+volurl+"/"+ch, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		resp.Body.Close()
+	}
+	return f.redisClient.Del("fs/" + path).Err()
+}
+
+func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
 	fmt.Printf("Upload %s: ", path)
 
-	var chunks []string
+	fi := redisFileInfo{
+		Name: path,
+	}
+
 	for {
 		buf := make([]byte, chunksize)
 		n, err := io.ReadFull(r.Body, buf)
@@ -74,18 +169,33 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 		buf = buf[0:n]
 		fid, err := f.uploadChunk(buf)
 		if err != nil {
-			fmt.Print(err)
-			return
+			return err
 		}
-		chunks = append(chunks, fid)
+		fi.Chunks = append(fi.Chunks, fid)
 	}
-	fmt.Printf("%+v\n", chunks)
+	jb, err := json.Marshal(&fi)
+	if err != nil {
+		return err
+	}
+	if err = f.redisClient.Set("fs/"+fi.Name, jb, 0).Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	switch r.Method {
 	case "PUT", "POST":
-		f.handleUpload(w, r)
+		err = f.handleUpload(w, r)
+	case "GET":
+		err = f.handleDownload(w, r)
+	case "DELETE":
+		err = f.handleDelete(w, r)
+	}
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -96,6 +206,11 @@ var (
 func main() {
 	flag.Parse()
 	f := filerServer{
+		redisClient: redis.NewClient(&redis.Options{
+			Addr:     "localhost:6379",
+			Password: "", // no password set
+			DB:       0,  // use default DB
+		}),
 		weedMaster: "http://localhost:9333",
 	}
 	http.Handle("/", &f)
