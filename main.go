@@ -95,7 +95,52 @@ type redisFileInfo struct {
 	Chunks  []redisChunk
 }
 
+type fileList struct {
+	Entries []listFileEntry
+}
+
+type listFileEntry struct {
+	Name string
+}
+
+func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request) error {
+	pattern := "fs" + r.URL.Path + "*"
+	var cursor int64
+	seen := make(map[string]struct{})
+	var names []string
+	for {
+		var keys []string
+		var err error
+		cursor, keys, err = f.redisClient.Scan(cursor, pattern, 100).Result()
+		if err != nil {
+			return err
+		}
+		for _, v := range keys {
+			if !strings.HasPrefix(v, "fs"+r.URL.Path) {
+				continue
+			}
+			pf := strings.TrimPrefix(v, "fs")
+			if _, ok := seen[pf]; !ok {
+				seen[pf] = struct{}{}
+				names = append(names, pf)
+			}
+		}
+		if cursor == 0 {
+			break
+		}
+	}
+	sort.Strings(names)
+	var wr fileList
+	for _, v := range names {
+		wr.Entries = append(wr.Entries, listFileEntry{Name: v})
+	}
+	return json.NewEncoder(w).Encode(&wr)
+}
+
 func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request) error {
+	if r.URL.Path[len(r.URL.Path)-1] == '/' {
+		return f.handleList(w, r)
+	}
 	fi, err := f.getFileInfo(r.URL.Path)
 	if err != nil {
 		return err
