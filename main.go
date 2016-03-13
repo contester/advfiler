@@ -103,8 +103,9 @@ type listFileEntry struct {
 	Name string
 }
 
-func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request) error {
-	pattern := "fs" + r.URL.Path + "*"
+func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path string) error {
+	prefix := redisKey(path)
+	pattern := prefix + "*"
 	var cursor int64
 	seen := make(map[string]struct{})
 	var names []string
@@ -116,13 +117,11 @@ func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		for _, v := range keys {
-			if !strings.HasPrefix(v, "fs"+r.URL.Path) {
-				continue
-			}
-			pf := strings.TrimPrefix(v, "fs")
-			if _, ok := seen[pf]; !ok {
-				seen[pf] = struct{}{}
-				names = append(names, pf)
+			if pf, _ := redisKeyToPath(v); pf != "" {
+				if _, ok := seen[pf]; !ok {
+					seen[pf] = struct{}{}
+					names = append(names, pf)
+				}
 			}
 		}
 		if cursor == 0 {
@@ -137,11 +136,11 @@ func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request) error {
 	return json.NewEncoder(w).Encode(&wr)
 }
 
-func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request) error {
-	if r.URL.Path[len(r.URL.Path)-1] == '/' {
-		return f.handleList(w, r)
+func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, path string) error {
+	if path == "" || path[len(path)-1] == '/' {
+		return f.handleList(w, r, path)
 	}
-	fi, err := f.getFileInfo(r.URL.Path)
+	fi, err := f.getFileInfo(path)
 	if err != nil {
 		return err
 	}
@@ -180,8 +179,26 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
+func urlToPath(urlpath string) (string, error) {
+	if !strings.HasPrefix(urlpath, "/fs/") {
+		return "", fmt.Errorf("url must start with /fs/")
+	}
+	return strings.TrimPrefix(urlpath, "/fs/"), nil
+}
+
+func redisKey(path string) string {
+	return "fs/" + path
+}
+
+func redisKeyToPath(key string) (string, error) {
+	if !strings.HasPrefix(key, "fs/") {
+		return "", fmt.Errorf("key must start with fs/")
+	}
+	return strings.TrimPrefix(key, "fs/"), nil
+}
+
 func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
-	st := f.redisClient.Get("fs" + path)
+	st := f.redisClient.Get(redisKey(path))
 	if st.Err() != nil {
 		return nil, st.Err()
 	}
@@ -196,8 +213,8 @@ func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
 	return &fi, nil
 }
 
-func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request) error {
-	fi, err := f.getFileInfo(r.URL.Path)
+func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path string) error {
+	fi, err := f.getFileInfo(path)
 	if err != nil {
 		return err
 	}
@@ -217,16 +234,22 @@ func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request) error
 		}
 		resp.Body.Close()
 	}
-	return f.redisClient.Del("fs" + r.URL.Path).Err()
+	return f.redisClient.Del(redisKey(path)).Err()
 }
 
-func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) error {
-	if fi, err := f.getFileInfo(r.URL.Path); err == nil && fi != nil {
+func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path string) error {
+	if path == "" {
+		return fmt.Errorf("can't upload to empty path")
+	}
+	if path[len(path)-1] == '/' {
+		return fmt.Errorf("can't upload to directory")
+	}
+	if fi, err := f.getFileInfo(path); err == nil && fi != nil {
 		return fmt.Errorf("file already exists")
 	}
 
 	fi := redisFileInfo{
-		Name: r.URL.Path,
+		Name: path,
 	}
 	hashes := map[string]hash.Hash{
 		"MD5": md5.New(),
@@ -266,21 +289,23 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	if err = f.redisClient.Set("fs"+fi.Name, jb, 0).Err(); err != nil {
+	if err = f.redisClient.Set(redisKey(path), jb, 0).Err(); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var err error
-	switch r.Method {
-	case "PUT", "POST":
-		err = f.handleUpload(w, r)
-	case "GET":
-		err = f.handleDownload(w, r)
-	case "DELETE":
-		err = f.handleDelete(w, r)
+	path, err := urlToPath(r.URL.Path)
+	if err == nil {
+		switch r.Method {
+		case "PUT", "POST":
+			err = f.handleUpload(w, r, path)
+		case "GET":
+			err = f.handleDownload(w, r, path)
+		case "DELETE":
+			err = f.handleDelete(w, r, path)
+		}
 	}
 	if err != nil {
 		fmt.Println(err)
@@ -302,6 +327,6 @@ func main() {
 		}),
 		weedMaster: "http://localhost:9333",
 	}
-	http.Handle("/", &f)
+	http.Handle("/fs/", &f)
 	http.ListenAndServe(*listen, nil)
 }
