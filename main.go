@@ -1,25 +1,28 @@
 package main
 
 import (
-	"gopkg.in/redis.v3"
-	"net/http"
-	"fmt"
-	"flag"
-	"io"
+	"bytes"
 	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+
+	"gopkg.in/redis.v3"
 )
 
 type filerServer struct {
 	redisClient *redis.Client
-	weedMaster string
+	weedMaster  string
 }
 
 const chunksize = 256 * 1024
 
 type assignResp struct {
-	Count int `json:"count"`
-	Fid string `json:"fid"`
-	Url string `json:"url"`
+	Count     int    `json:"count"`
+	Fid       string `json:"fid"`
+	Url       string `json:"url"`
 	PublicUrl string `json:"publicUrl"`
 }
 
@@ -34,13 +37,30 @@ func (f *filerServer) uploadChunk(buf []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("%+v", &ar)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "test.dat")
+	if err != nil {
+		return "", err
+	}
+	if _, err = part.Write(buf); err != nil {
+		return "", err
+	}
+	writer.Close()
+	resp, err = http.Post("http://"+ar.Url+"/"+ar.Fid, writer.FormDataContentType(), &body)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+
 	return ar.Fid, nil
 }
 
 func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-	fmt.Printf("Upload %s", path)
+	fmt.Printf("Upload %s: ", path)
+
 	var chunks []string
 	for {
 		buf := make([]byte, chunksize)
@@ -54,15 +74,17 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 		buf = buf[0:n]
 		fid, err := f.uploadChunk(buf)
 		if err != nil {
+			fmt.Print(err)
 			return
 		}
 		chunks = append(chunks, fid)
 	}
+	fmt.Printf("%+v\n", chunks)
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case "PUT":
+	case "PUT", "POST":
 		f.handleUpload(w, r)
 	}
 }
@@ -71,11 +93,10 @@ var (
 	listen = flag.String("listen", ":9094", "")
 )
 
-
 func main() {
 	flag.Parse()
 	f := filerServer{
-		weedMaster: "http://turboo.sgu.ru:9333",
+		weedMaster: "http://localhost:9333",
 	}
 	http.Handle("/", &f)
 	http.ListenAndServe(*listen, nil)
