@@ -2,12 +2,18 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"sort"
+	"strings"
 
 	"gopkg.in/redis.v3"
 )
@@ -77,32 +83,45 @@ func lookupVolUrl(weedMaster, fid string) (string, error) {
 	return ld.Locations[0].Url, nil
 }
 
+type redisChunk struct {
+	Fid     string
+	Sha1sum []byte
+}
+
 type redisFileInfo struct {
-	Name   string
-	Chunks []string
+	Name    string
+	Size    int64
+	Digests map[string]string
+	Chunks  []redisChunk
 }
 
 func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path
-	st := f.redisClient.Get("fs/" + path)
-	if st.Err() != nil {
-		return st.Err()
-	}
-	ust, err := st.Bytes()
+	fi, err := f.getFileInfo(r.URL.Path)
 	if err != nil {
 		return err
 	}
-	var fi redisFileInfo
-	if err = json.Unmarshal(ust, &fi); err != nil {
-		return err
+
+	var dkeys []string
+	for k := range fi.Digests {
+		dkeys = append(dkeys, k)
 	}
+	sort.Strings(dkeys)
+	var dvals []string
+	for _, k := range dkeys {
+		dvals = append(dvals, k+"="+fi.Digests[k])
+	}
+	w.Header().Add("Digest", strings.Join(dvals, ","))
+	if md5, ok := fi.Digests["MD5"]; ok && md5 != "" {
+		w.Header().Add("Content-MD5", md5)
+	}
+	w.Header().Add("Content-Length", fmt.Sprintf("%d", fi.Size))
 
 	for _, ch := range fi.Chunks {
-		volurl, err := lookupVolUrl(f.weedMaster, ch)
+		volurl, err := lookupVolUrl(f.weedMaster, ch.Fid)
 		if err != nil {
 			return err
 		}
-		resp, err := http.Get("http://" + volurl + "/" + ch)
+		resp, err := http.Get("http://" + volurl + "/" + ch.Fid)
 		if err != nil {
 			return err
 		}
@@ -116,27 +135,34 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request) err
 	return nil
 }
 
-func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path
-	st := f.redisClient.Get("fs/" + path)
+func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
+	st := f.redisClient.Get("fs" + path)
 	if st.Err() != nil {
-		return st.Err()
+		return nil, st.Err()
 	}
 	ust, err := st.Bytes()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var fi redisFileInfo
 	if err = json.Unmarshal(ust, &fi); err != nil {
+		return nil, err
+	}
+	return &fi, nil
+}
+
+func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request) error {
+	fi, err := f.getFileInfo(r.URL.Path)
+	if err != nil {
 		return err
 	}
 
 	for _, ch := range fi.Chunks {
-		volurl, err := lookupVolUrl(f.weedMaster, ch)
+		volurl, err := lookupVolUrl(f.weedMaster, ch.Fid)
 		if err != nil {
 			return err
 		}
-		req, err := http.NewRequest("DELETE", "http://"+volurl+"/"+ch, nil)
+		req, err := http.NewRequest("DELETE", "http://"+volurl+"/"+ch.Fid, nil)
 		if err != nil {
 			return err
 		}
@@ -146,15 +172,20 @@ func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request) error
 		}
 		resp.Body.Close()
 	}
-	return f.redisClient.Del("fs/" + path).Err()
+	return f.redisClient.Del("fs" + r.URL.Path).Err()
 }
 
 func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path
-	fmt.Printf("Upload %s: ", path)
+	if fi, err := f.getFileInfo(r.URL.Path); err == nil && fi != nil {
+		return fmt.Errorf("file already exists")
+	}
 
 	fi := redisFileInfo{
-		Name: path,
+		Name: r.URL.Path,
+	}
+	hashes := map[string]hash.Hash{
+		"MD5": md5.New(),
+		"SHA": sha1.New(),
 	}
 
 	for {
@@ -167,17 +198,30 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request) error
 			break
 		}
 		buf = buf[0:n]
+		csum := sha1.Sum(buf)
+
 		fid, err := f.uploadChunk(buf)
 		if err != nil {
 			return err
 		}
-		fi.Chunks = append(fi.Chunks, fid)
+		for _, v := range hashes {
+			v.Write(buf)
+		}
+		fi.Size += int64(n)
+		fi.Chunks = append(fi.Chunks, redisChunk{
+			Fid:     fid,
+			Sha1sum: csum[:],
+		})
+	}
+	fi.Digests = make(map[string]string)
+	for k, v := range hashes {
+		fi.Digests[k] = base64.StdEncoding.EncodeToString(v.Sum(nil))
 	}
 	jb, err := json.Marshal(&fi)
 	if err != nil {
 		return err
 	}
-	if err = f.redisClient.Set("fs/"+fi.Name, jb, 0).Err(); err != nil {
+	if err = f.redisClient.Set("fs"+fi.Name, jb, 0).Err(); err != nil {
 		return err
 	}
 	return nil
