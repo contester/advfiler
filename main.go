@@ -130,11 +130,13 @@ func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path st
 		}
 	}
 	sort.Strings(names)
-	var wr fileList
+	w.Write([]byte(strings.Join(names, "\n")))
+	/*var wr fileList
 	for _, v := range names {
 		wr.Entries = append(wr.Entries, listFileEntry{Name: v})
 	}
-	return json.NewEncoder(w).Encode(&wr)
+	return json.NewEncoder(w).Encode(&wr)*/
+	return nil
 }
 
 func addDigests(h http.Header, digests map[string]string) {
