@@ -173,6 +173,10 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	}
 	fi, err := f.getFileInfo(path)
 	if err != nil {
+		if err == redis.Nil {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return nil
+		}
 		return err
 	}
 	addDigests(w.Header(), fi.Digests)
@@ -220,7 +224,6 @@ func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("%s %d %d\n", path, len(res), strings.IndexByte(res, 0))
 	var fi redisFileInfo
 	if err = json.Unmarshal([]byte(res), &fi); err != nil {
 		return nil, err
@@ -267,6 +270,11 @@ func (f *filerServer) deleteChunks(chunks []redisChunk) {
 	for _, v := range chunks {
 		f.deleteChunkFid(v.Fid)
 	}
+}
+
+type shortUploadStatus struct {
+	Digests map[string]string
+	Size    int64
 }
 
 func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path string) error {
@@ -350,8 +358,11 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		f.deleteChunks(fi.Chunks)
 		return err
 	}
-	w.Write(jb)
-	return nil
+	ss := shortUploadStatus{
+		Digests: fi.Digests,
+		Size:    fi.Size,
+	}
+	return json.NewEncoder(w).Encode(&ss)
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -364,6 +375,8 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			err = f.handleDownload(w, r, path)
 		case "DELETE":
 			err = f.handleDelete(w, r, path)
+		default:
+			http.Error(w, "", http.StatusMethodNotAllowed)
 		}
 	}
 	if err != nil {
