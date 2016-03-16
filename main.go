@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gopkg.in/redis.v3"
 )
@@ -231,18 +232,30 @@ func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
 	return &fi, nil
 }
 
+func (f *filerServer) deleteFile(fi *redisFileInfo) error {
+	redisErr := f.redisClient.Del(redisKey(fi.Name)).Err()
+	var wg sync.WaitGroup
+	wg.Add(len(fi.Chunks))
+	for _, ch := range fi.Chunks {
+		go func(fid string) {
+			defer wg.Done()
+			f.deleteChunkFid(fid)
+		}(ch.Fid)
+	}
+	wg.Wait()
+	return redisErr
+}
+
 func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path string) error {
 	fi, err := f.getFileInfo(path)
 	if err != nil {
+		if err == redis.Nil {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return nil
+		}
 		return err
 	}
-
-	for _, ch := range fi.Chunks {
-		if err = f.deleteChunkFid(ch.Fid); err != nil {
-			return err
-		}
-	}
-	return f.redisClient.Del(redisKey(path)).Err()
+	return f.deleteFile(fi)
 }
 
 func deleteChunkURL(url string) error {
@@ -285,7 +298,9 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		return fmt.Errorf("can't upload to directory")
 	}
 	if fi, err := f.getFileInfo(path); err == nil && fi != nil {
-		return fmt.Errorf("file already exists")
+		if err = f.deleteFile(fi); err != nil {
+			return err
+		}
 	}
 
 	fi := redisFileInfo{
