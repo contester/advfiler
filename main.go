@@ -105,29 +105,39 @@ type listFileEntry struct {
 	Name string
 }
 
-func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path string) error {
-	prefix := redisKey(path)
-	pattern := prefix + "*"
+func getAllKeys(client *redis.Client, pattern string) ([]string, error) {
 	var cursor int64
 	seen := make(map[string]struct{})
-	var names []string
+	var result []string
 	for {
 		var keys []string
 		var err error
-		cursor, keys, err = f.redisClient.Scan(cursor, pattern, 100).Result()
+		cursor, keys, err = client.Scan(cursor, pattern, 100).Result()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, v := range keys {
-			if pf, _ := redisKeyToPath(v); pf != "" {
-				if _, ok := seen[pf]; !ok {
-					seen[pf] = struct{}{}
-					names = append(names, pf)
-				}
+			if _, ok := seen[v]; !ok {
+				result = append(result, v)
+				seen[v] = struct{}{}
 			}
 		}
 		if cursor == 0 {
 			break
+		}
+	}
+	return result, nil
+}
+
+func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path string) error {
+	keys, err := getAllKeys(f.redisClient, redisKey(path)+"*")
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(keys))
+	for _, v := range keys {
+		if pf, _ := redisKeyToPath(v); pf != "" {
+			names = append(names, pf)
 		}
 	}
 	sort.Strings(names)
@@ -400,6 +410,130 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type metadataServer struct {
+	redisClient *redis.Client
+}
+
+type problemManifest struct {
+	Id       string `json:"id"`
+	Revision int    `json:"revision"`
+
+	TestCount       int    `json:"test_count"`
+	TimeLimitMicros int64  `json:"time_limit_micros"`
+	MemoryLimit     int64  `json:"memory_limit"`
+	Stdio           bool   `json:"stdio,omitempty"`
+	TesterName      string `json:"tester_name"`
+	Answers         []int  `json:"answers,omitempty"`
+	InteractorName  string `json:"interactor_name,omitempty"`
+	CombinedHash    string `json:"combined_hash,omitempty"`
+}
+
+func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "PUT" && r.Method != "POST" {
+		http.Error(w, "", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var mf problemManifest
+	if err := json.NewDecoder(r.Body).Decode(&mf); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	mb, err := json.Marshal(&mf)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err = f.redisClient.Set(problemRedisKeyRev(mf.Id, mf.Revision), mb, 0).Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	return
+}
+
+func problemRedisKey(suffix string) string {
+	return "problem/" + suffix
+}
+
+func problemRedisKeyRev(id string, rev int) string {
+	return problemRedisKey(id + "/" + strconv.FormatInt(int64(rev), 10))
+}
+
+func (f *metadataServer) getManifestByKey(key string) (problemManifest, error) {
+	var result problemManifest
+	data, err := f.redisClient.Get(key).Result()
+	if err != nil {
+		return result, err
+	}
+	err = json.Unmarshal([]byte(data), &result)
+	return result, err
+}
+
+func (f *metadataServer) getAllRevs(id string) ([]problemManifest, error) {
+	keys, err := getAllKeys(f.redisClient, problemRedisKey(id)+"/*")
+	if err != nil {
+		return nil, err
+	}
+	result := make([]problemManifest, 0, len(keys))
+	for _, v := range keys {
+		if m, err := f.getManifestByKey(v); err == nil {
+			result = append(result, m)
+		}
+	}
+	return result, nil
+}
+
+type byIdRev []problemManifest
+
+func (s byIdRev) Len() int      { return len(s) }
+func (s byIdRev) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s byIdRev) Less(i, j int) bool {
+	if s[i].Id < s[j].Id {
+		return true
+	}
+	if s[j].Id > s[j].Id {
+		return false
+	}
+	return s[i].Revision > s[j].Revision
+}
+
+func (f *metadataServer) serveAllRevisions(w http.ResponseWriter, r *http.Request, id string) {
+	revs, err := f.getAllRevs(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sort.Sort(byIdRev(revs))
+	json.NewEncoder(w).Encode(revs)
+}
+
+func (f *metadataServer) serveProblemList(w http.ResponseWriter, r *http.Request) {
+}
+
+func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	id := r.FormValue("id")
+	if id == "" {
+		f.serveProblemList(w, r)
+		return
+	}
+
+	rev := r.FormValue("revision")
+	if rev == "" {
+		f.serveAllRevisions(w, r, id)
+		return
+	}
+	return
+}
+
 var (
 	listen = flag.String("listen", ":9094", "")
 )
@@ -414,7 +548,12 @@ func main() {
 		}),
 		weedMaster: "http://localhost:9333",
 	}
+	ms := metadataServer{
+		redisClient: f.redisClient,
+	}
 	fmt.Println(f.redisClient.Ping().Result())
 	http.Handle("/fs/", &f)
+	http.HandleFunc("/problem/set/", ms.handleSetManifest)
+	http.HandleFunc("/problem/get/", ms.handleGetManifest)
 	http.ListenAndServe(*listen, nil)
 }
