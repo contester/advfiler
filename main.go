@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	//	log "github.com/Sirupsen/logrus"
 	"gopkg.in/redis.v3"
 )
 
@@ -91,10 +92,11 @@ type redisChunk struct {
 }
 
 type redisFileInfo struct {
-	Name    string
-	Size    int64
-	Digests map[string]string
-	Chunks  []redisChunk
+	Name       string
+	Size       int64
+	Digests    map[string]string
+	ModuleType string `json:",omitempty"`
+	Chunks     []redisChunk
 }
 
 type fileList struct {
@@ -192,6 +194,10 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	}
 	addDigests(w.Header(), fi.Digests)
 	w.Header().Add("Content-Length", strconv.FormatInt(fi.Size, 10))
+	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(fi.Size, 10))
+	if fi.ModuleType != "" {
+		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
+	}
 
 	for _, ch := range fi.Chunks {
 		volurl, err := lookupVolUrl(f.weedMaster, ch.Fid)
@@ -314,7 +320,8 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 	}
 
 	fi := redisFileInfo{
-		Name: path,
+		Name:       path,
+		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 	}
 	hashes := map[string]hash.Hash{
 		"MD5": md5.New(),
@@ -323,7 +330,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 
 	contentLength := int64(-1)
 
-	if ch := r.Header.Get("Content-Length"); ch != "" {
+	if ch := r.Header.Get("X-Fs-Content-Length"); ch != "" {
 		var err error
 		contentLength, err = strconv.ParseInt(ch, 10, 64)
 		if err != nil {
@@ -360,7 +367,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 	}
 	if contentLength >= 0 && fi.Size != contentLength {
 		f.deleteChunks(fi.Chunks)
-		return fmt.Errorf("size mismatch")
+		return nil
 	}
 	fi.Digests = make(map[string]string)
 	recvDigests := parseDigests(r.Header.Get("Digest"))
@@ -371,17 +378,17 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		fi.Digests[k] = base64.StdEncoding.EncodeToString(v.Sum(nil))
 		if prev, ok := recvDigests[k]; ok && fi.Digests[k] != prev {
 			f.deleteChunks(fi.Chunks)
-			return fmt.Errorf("%s checksum mismatch", k)
+			return nil
 		}
 	}
 	jb, err := json.Marshal(&fi)
 	if err != nil {
 		f.deleteChunks(fi.Chunks)
-		return err
+		return nil
 	}
 	if err = f.redisClient.Set(redisKey(path), jb, 0).Err(); err != nil {
 		f.deleteChunks(fi.Chunks)
-		return err
+		return nil
 	}
 	ss := shortUploadStatus{
 		Digests: fi.Digests,
@@ -418,14 +425,14 @@ type problemManifest struct {
 	Id       string `json:"id"`
 	Revision int    `json:"revision"`
 
-	TestCount       int    `json:"test_count"`
-	TimeLimitMicros int64  `json:"time_limit_micros"`
-	MemoryLimit     int64  `json:"memory_limit"`
+	TestCount       int    `json:"testCount"`
+	TimeLimitMicros int64  `json:"timeLimitMicros"`
+	MemoryLimit     int64  `json:"memoryLimit"`
 	Stdio           bool   `json:"stdio,omitempty"`
-	TesterName      string `json:"tester_name"`
+	TesterName      string `json:"testerName"`
 	Answers         []int  `json:"answers,omitempty"`
-	InteractorName  string `json:"interactor_name,omitempty"`
-	CombinedHash    string `json:"combined_hash,omitempty"`
+	InteractorName  string `json:"interactorName,omitempty"`
+	CombinedHash    string `json:"combinedHash,omitempty"`
 }
 
 func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Request) {
