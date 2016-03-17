@@ -469,11 +469,7 @@ func (f *metadataServer) getManifestByKey(key string) (problemManifest, error) {
 	return result, err
 }
 
-func (f *metadataServer) getAllRevs(id string) ([]problemManifest, error) {
-	keys, err := getAllKeys(f.redisClient, problemRedisKey(id)+"/*")
-	if err != nil {
-		return nil, err
-	}
+func (f *metadataServer) getAllManifests(keys []string) ([]problemManifest, error) {
 	result := make([]problemManifest, 0, len(keys))
 	for _, v := range keys {
 		if m, err := f.getManifestByKey(v); err == nil {
@@ -481,6 +477,18 @@ func (f *metadataServer) getAllRevs(id string) ([]problemManifest, error) {
 		}
 	}
 	return result, nil
+}
+
+func (f *metadataServer) getAllManifestsPattern(pattern string) ([]problemManifest, error) {
+	keys, err := getAllKeys(f.redisClient, pattern)
+	if err != nil {
+		return nil, err
+	}
+	return f.getAllManifests(keys)
+}
+
+func (f *metadataServer) getAllRevs(id string) ([]problemManifest, error) {
+	return f.getAllManifestsPattern(problemRedisKey(id) + "/*")
 }
 
 type byIdRev []problemManifest
@@ -508,6 +516,13 @@ func (f *metadataServer) serveAllRevisions(w http.ResponseWriter, r *http.Reques
 }
 
 func (f *metadataServer) serveProblemList(w http.ResponseWriter, r *http.Request) {
+	revs, err := f.getAllManifestsPattern("problem/*")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sort.Sort(byIdRev(revs))
+	json.NewEncoder(w).Encode(revs)
 }
 
 func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Request) {
