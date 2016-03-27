@@ -198,6 +198,9 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	if fi.ModuleType != "" {
 		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
 	}
+	if r.Method == "HEAD" {
+		return nil
+	}
 
 	for _, ch := range fi.Chunks {
 		volurl, err := lookupVolUrl(f.weedMaster, ch.Fid)
@@ -403,7 +406,7 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "PUT", "POST":
 			err = f.handleUpload(w, r, path)
-		case "GET":
+		case "GET", "HEAD":
 			err = f.handleDownload(w, r, path)
 		case "DELETE":
 			err = f.handleDelete(w, r, path)
@@ -518,8 +521,14 @@ func (f *metadataServer) serveAllRevisions(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if len(revs) == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	sort.Sort(byIdRev(revs))
-	json.NewEncoder(w).Encode(revs)
+	if err = json.NewEncoder(w).Encode(revs); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (f *metadataServer) serveProblemList(w http.ResponseWriter, r *http.Request) {
