@@ -486,6 +486,7 @@ func (f *metadataServer) getAllManifests(keys []string) ([]problemManifest, erro
 			result = append(result, m)
 		}
 	}
+	sort.Sort(byIdRev(result))
 	return result, nil
 }
 
@@ -499,6 +500,14 @@ func (f *metadataServer) getAllManifestsPattern(pattern string) ([]problemManife
 
 func (f *metadataServer) getAllRevs(id string) ([]problemManifest, error) {
 	return f.getAllManifestsPattern(problemRedisKey(id) + "/*")
+}
+
+func (f *metadataServer) getSingleRev(id string, revision int64) ([]problemManifest, error) {
+	rev, err := f.getManifestByKey(id + "/" + strconv.FormatInt(revision, 10))
+	if err != nil {
+		return nil, err
+	}
+	return []problemManifest{rev}, nil
 }
 
 type byIdRev []problemManifest
@@ -551,18 +560,35 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	var revs []problemManifest
+	var err error
+
 	id := r.FormValue("id")
 	if id == "" {
-		f.serveProblemList(w, r)
+		if revs, err = f.getAllManifestsPattern("problem/*"); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		json.NewEncoder(w).Encode(revs)
 		return
 	}
 
 	rev := r.FormValue("revision")
 	if rev == "" {
-		f.serveAllRevisions(w, r, id)
+		revs, err = f.getAllRevs(id)
+	} else {
+		if revValue, err := strconv.ParseInt(rev, 10, 64); err == nil {
+			revs, err = f.getSingleRev(id, revValue)
+		}
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	return
+	if len(revs) == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(revs)
 }
 
 var (
