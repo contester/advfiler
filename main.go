@@ -461,6 +461,13 @@ func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Reques
 	return
 }
 
+func (f *metadataServer) handleDelManifest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "", http.StatusMethodNotAllowed)
+		return
+	}
+}
+
 func problemRedisKey(suffix string) string {
 	return "problem/" + suffix
 }
