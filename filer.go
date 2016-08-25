@@ -157,12 +157,8 @@ func (f *filerServer) urlToPath(urlpath string) (string, error) {
 }
 
 func (f *filerServer) getFileInfo(ctx context.Context, path string) (*redisFileInfo, error) {
-	res, err := f.kv.Get(ctx, path)
-	if err != nil {
-		return nil, err
-	}
 	var fi redisFileInfo
-	if err = json.Unmarshal(res, &fi); err != nil {
+	if err := KVGetJson(ctx, f.kv, path, &fi); err != nil {
 		return nil, err
 	}
 	return &fi, nil

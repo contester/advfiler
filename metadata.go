@@ -70,11 +70,7 @@ func revKey(id string, rev int) string {
 
 func (f *metadataServer) getManifest(ctx context.Context, key string) (problemManifest, error) {
 	var result problemManifest
-	data, err := f.kv.Get(ctx, key)
-	if err != nil {
-		return result, err
-	}
-	err = json.Unmarshal(data, &result)
+	err := KVGetJson(ctx, f.kv, key, &result)
 	return result, err
 }
 

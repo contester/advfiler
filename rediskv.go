@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 
 	"gopkg.in/redis.v4"
 )
@@ -81,4 +82,16 @@ func getAllKeys(client *redis.Client, pattern string) ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+type GetKV interface {
+	Get(ctx context.Context, key string) ([]byte, error)
+}
+
+func KVGetJson(ctx context.Context, kv GetKV, key string, value interface{}) error {
+	res, err := kv.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(res, value)
 }
