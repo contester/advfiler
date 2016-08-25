@@ -79,12 +79,12 @@ func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path st
 }
 
 func addDigests(h http.Header, digests map[string]string) {
-	var dkeys []string
+	dkeys := make([]string, 0, len(digests))
 	for k := range digests {
 		dkeys = append(dkeys, k)
 	}
 	sort.Strings(dkeys)
-	var dvals []string
+	dvals := make([]string, 0, len(dkeys))
 	for _, k := range dkeys {
 		dvals = append(dvals, k+"="+digests[k])
 	}
@@ -95,8 +95,9 @@ func addDigests(h http.Header, digests map[string]string) {
 }
 
 func parseDigests(dh string) map[string]string {
-	result := make(map[string]string)
-	for _, v := range strings.Split(dh, ",") {
+	splits := strings.Split(dh, ",")
+	result := make(map[string]string, len(splits))
+	for _, v := range splits {
 		ds := strings.SplitN(strings.TrimSpace(v), "=", 2)
 		if len(ds) != 2 {
 			continue
@@ -119,12 +120,13 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 		return err
 	}
 	addDigests(w.Header(), fi.Digests)
-	w.Header().Add("Content-Length", strconv.FormatInt(fi.Size, 10))
-	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(fi.Size, 10))
+	strSize := strconv.FormatInt(fi.Size, 10)
+	w.Header().Add("Content-Length", strSize)
+	w.Header().Add("X-Fs-Content-Length", strSize)
 	if fi.ModuleType != "" {
 		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
 	}
-	if r.Method == "HEAD" {
+	if r.Method == http.MethodHead {
 		return nil
 	}
 
@@ -265,6 +267,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		fi.Chunks = append(fi.Chunks, redisChunk{
 			Fid:     fid,
 			Sha1sum: csum[:],
+			Size:    int64(n),
 		})
 	}
 	if contentLength >= 0 && fi.Size != contentLength {
