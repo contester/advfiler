@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	//	log "github.com/Sirupsen/logrus"
-	"gopkg.in/redis.v3"
+	"gopkg.in/redis.v4"
 )
 
 type filerServer struct {
@@ -108,13 +108,13 @@ type listFileEntry struct {
 }
 
 func getAllKeys(client *redis.Client, pattern string) ([]string, error) {
-	var cursor int64
+	var cursor uint64
 	seen := make(map[string]struct{})
 	var result []string
 	for {
 		var keys []string
 		var err error
-		cursor, keys, err = client.Scan(cursor, pattern, 100).Result()
+		keys, cursor, err = client.Scan(cursor, pattern, 100).Result()
 		if err != nil {
 			return nil, err
 		}
