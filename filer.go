@@ -114,7 +114,7 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	fi, err := f.getFileInfo(r.Context(), path)
 	if err != nil {
 		if err == redis.Nil {
-			http.Error(w, "File not found", http.StatusNotFound)
+			http.NotFound(w, r)
 			return nil
 		}
 		return err
@@ -174,7 +174,7 @@ func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path 
 	fi, err := f.getFileInfo(r.Context(), path)
 	if err != nil {
 		if err == redis.Nil {
-			http.Error(w, "File not found", http.StatusNotFound)
+			http.NotFound(w, r)
 			return nil
 		}
 		return err

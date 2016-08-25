@@ -34,6 +34,11 @@ type problemManifest struct {
 	CombinedHash    string `json:"combinedHash,omitempty"`
 }
 
+type problemKey struct {
+	Id       string `json:"id"`
+	Revision int    `json:"revision"`
+}
+
 func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "PUT" && r.Method != "POST" {
 		http.Error(w, "", http.StatusMethodNotAllowed)
@@ -74,8 +79,8 @@ func (f *metadataServer) getManifest(ctx context.Context, key string) (problemMa
 	return result, err
 }
 
-func (f *metadataServer) getAllManifests(ctx context.Context, prefix string) ([]problemManifest, error) {
-	keys, err := f.kv.List(ctx, prefix)
+func (f *metadataServer) getK(ctx context.Context, pk problemKey) ([]problemManifest, error) {
+	keys, err := f.buildKeys(ctx, pk)
 	if err != nil {
 		return nil, err
 	}
@@ -89,15 +94,11 @@ func (f *metadataServer) getAllManifests(ctx context.Context, prefix string) ([]
 	return result, nil
 }
 
-func (f *metadataServer) getSingleRev(ctx context.Context, id string, revision int64) ([]problemManifest, error) {
-	rev, err := f.getManifest(ctx, revKey(id, int(revision)))
-	if err == redis.Nil {
-		return nil, nil
+func (f *metadataServer) buildKeys(ctx context.Context, pk problemKey) ([]string, error) {
+	if pk.Revision == 0 {
+		return []string{revKey(pk.Id, pk.Revision)}, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	return []problemManifest{rev}, nil
+	return f.kv.List(ctx, pk.Id)
 }
 
 type byIdRev []problemManifest
@@ -114,6 +115,19 @@ func (s byIdRev) Less(i, j int) bool {
 	return s[i].Revision > s[j].Revision
 }
 
+func getRequestProblemKey(r *http.Request) (problemKey, error) {
+	result := problemKey{
+		Id: r.FormValue("id"),
+	}
+	rev := r.FormValue("revision")
+	if rev == "" {
+		return result, nil
+	}
+	var err error
+	result.Revision, err = strconv.Atoi(rev)
+	return result, err
+}
+
 func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "", http.StatusMethodNotAllowed)
@@ -124,33 +138,20 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var revs []problemManifest
-	var err error
-
-	id := r.FormValue("id")
-	if id == "" {
-		if revs, err = f.getAllManifests(r.Context(), ""); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		json.NewEncoder(w).Encode(revs)
-		return
-	}
-
-	rev := r.FormValue("revision")
-	if rev == "" {
-		revs, err = f.getAllManifests(r.Context(), id)
-	} else {
-		var revValue int64
-		if revValue, err = strconv.ParseInt(rev, 10, 64); err == nil {
-			revs, err = f.getSingleRev(r.Context(), id, revValue)
-		}
-	}
+	pk, err := getRequestProblemKey(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if len(revs) == 0 {
-		http.Error(w, "not found", http.StatusNotFound)
+
+	revs, err := f.getK(r.Context(), pk)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(revs) == 0 && pk.Id != "" {
+		http.NotFound(w, r)
 		return
 	}
 	json.NewEncoder(w).Encode(revs)
