@@ -33,7 +33,7 @@ type filerServer struct {
 
 func NewFiler(redisClient *redis.Client, weed *WeedClient) *filerServer {
 	return &filerServer{
-		kv:        NewRedisKV(redisClient),
+		kv:        NewRedisKV(redisClient, "fs/"),
 		weed:      weed,
 		urlPrefix: "/fs/",
 	}

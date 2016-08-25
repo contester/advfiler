@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -10,7 +11,13 @@ import (
 )
 
 type metadataServer struct {
-	redisClient *redis.Client
+	kv filerKV
+}
+
+func NewMetadataServer(client *redis.Client) *metadataServer {
+	return &metadataServer{
+		kv: NewRedisKV(client, "problem/"),
+	}
 }
 
 type problemManifest struct {
@@ -44,7 +51,7 @@ func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err = f.redisClient.Set(problemRedisKeyRev(mf.Id, mf.Revision), mb, 0).Err(); err != nil {
+	if err = f.kv.Set(r.Context(), revKey(mf.Id, mf.Revision), mb); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	return
@@ -57,28 +64,28 @@ func (f *metadataServer) handleDelManifest(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func problemRedisKey(suffix string) string {
-	return "problem/" + suffix
+func revKey(id string, rev int) string {
+	return id + "/" + strconv.Itoa(rev)
 }
 
-func problemRedisKeyRev(id string, rev int) string {
-	return problemRedisKey(id + "/" + strconv.FormatInt(int64(rev), 10))
-}
-
-func (f *metadataServer) getManifestByKey(key string) (problemManifest, error) {
+func (f *metadataServer) getManifest(ctx context.Context, key string) (problemManifest, error) {
 	var result problemManifest
-	data, err := f.redisClient.Get(key).Result()
+	data, err := f.kv.Get(ctx, key)
 	if err != nil {
 		return result, err
 	}
-	err = json.Unmarshal([]byte(data), &result)
+	err = json.Unmarshal(data, &result)
 	return result, err
 }
 
-func (f *metadataServer) getAllManifests(keys []string) ([]problemManifest, error) {
+func (f *metadataServer) getAllManifests(ctx context.Context, prefix string) ([]problemManifest, error) {
+	keys, err := f.kv.List(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]problemManifest, 0, len(keys))
 	for _, v := range keys {
-		if m, err := f.getManifestByKey(v); err == nil {
+		if m, err := f.getManifest(ctx, v); err == nil {
 			result = append(result, m)
 		}
 	}
@@ -86,20 +93,8 @@ func (f *metadataServer) getAllManifests(keys []string) ([]problemManifest, erro
 	return result, nil
 }
 
-func (f *metadataServer) getAllManifestsPattern(pattern string) ([]problemManifest, error) {
-	keys, err := getAllKeys(f.redisClient, pattern)
-	if err != nil {
-		return nil, err
-	}
-	return f.getAllManifests(keys)
-}
-
-func (f *metadataServer) getAllRevs(id string) ([]problemManifest, error) {
-	return f.getAllManifestsPattern(problemRedisKey(id) + "/*")
-}
-
-func (f *metadataServer) getSingleRev(id string, revision int64) ([]problemManifest, error) {
-	rev, err := f.getManifestByKey(problemRedisKey(id) + "/" + strconv.FormatInt(revision, 10))
+func (f *metadataServer) getSingleRev(ctx context.Context, id string, revision int64) ([]problemManifest, error) {
+	rev, err := f.getManifest(ctx, revKey(id, int(revision)))
 	if err == redis.Nil {
 		return nil, nil
 	}
@@ -124,7 +119,7 @@ func (s byIdRev) Less(i, j int) bool {
 }
 
 func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
+	if r.Method != http.MethodGet {
 		http.Error(w, "", http.StatusMethodNotAllowed)
 		return
 	}
@@ -138,7 +133,7 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	id := r.FormValue("id")
 	if id == "" {
-		if revs, err = f.getAllManifestsPattern("problem/*"); err != nil {
+		if revs, err = f.getAllManifests(r.Context(), ""); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		json.NewEncoder(w).Encode(revs)
@@ -147,11 +142,11 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	rev := r.FormValue("revision")
 	if rev == "" {
-		revs, err = f.getAllRevs(id)
+		revs, err = f.getAllManifests(r.Context(), id)
 	} else {
 		var revValue int64
 		if revValue, err = strconv.ParseInt(rev, 10, 64); err == nil {
-			revs, err = f.getSingleRev(id, revValue)
+			revs, err = f.getSingleRev(r.Context(), id, revValue)
 		}
 	}
 	if err != nil {

@@ -25,9 +25,7 @@ func main() {
 	})
 
 	f := NewFiler(rc, &WeedClient{master: "http://localhost:9333"})
-	ms := metadataServer{
-		redisClient: rc,
-	}
+	ms := NewMetadataServer(rc)
 	http.Handle("/fs/", f)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)

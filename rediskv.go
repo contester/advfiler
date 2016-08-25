@@ -11,10 +11,10 @@ type redisKV struct {
 	prefix string
 }
 
-func NewRedisKV(client *redis.Client) *redisKV {
+func NewRedisKV(client *redis.Client, prefix string) *redisKV {
 	return &redisKV{
 		client: client,
-		prefix: "fs/",
+		prefix: prefix,
 	}
 }
 
