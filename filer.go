@@ -18,18 +18,77 @@ import (
 	"gopkg.in/redis.v4"
 )
 
+type filerKV interface {
+	Get(ctx context.Context, key string) ([]byte, error)
+	List(ctx context.Context, prefix string) ([]string, error)
+	Del(ctx context.Context, key string) error
+	Set(ctx context.Context, key string, value []byte) error
+}
+
+type redisKV struct {
+	client *redis.Client
+	prefix string
+}
+
+func NewRedisKV(client *redis.Client) *redisKV {
+	return &redisKV{
+		client: client,
+		prefix: "fs/",
+	}
+}
+
+func (s *redisKV) toInternal(key string) string {
+	return s.prefix + key
+}
+
+func (s *redisKV) fromInternal(key string) (string, error) {
+	return trimOr(key, s.prefix, "redis key")
+}
+
+func (s *redisKV) Get(_ context.Context, key string) ([]byte, error) {
+	res, err := s.client.Get(s.toInternal(key)).Result()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(res), nil
+}
+
+func (s *redisKV) List(_ context.Context, prefix string) ([]string, error) {
+	keys, err := getAllKeys(s.client, s.toInternal(prefix)+"*")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(keys))
+	for _, v := range keys {
+		if pf, _ := s.fromInternal(v); pf != "" {
+			names = append(names, pf)
+		}
+	}
+	if len(names) == 0 {
+		names = nil
+	}
+	return names, nil
+}
+
+func (s *redisKV) Del(_ context.Context, key string) error {
+	return s.client.Del(s.toInternal(key)).Err()
+}
+
+func (s *redisKV) Set(_ context.Context, key string, value []byte) error {
+	return s.client.Set(s.toInternal(key), value, 0).Err()
+}
+
 type filerServer struct {
-	redisClient            *redis.Client
+	kv                     filerKV
 	weed                   *WeedClient
 	urlPrefix, redisPrefix string
 }
 
 func NewFiler(redisClient *redis.Client, weed *WeedClient) *filerServer {
 	return &filerServer{
-		redisClient: redisClient,
-		weed:        weed,
-		urlPrefix:   "fs/",
-		redisPrefix: "fs/",
+		kv:        NewRedisKV(redisClient),
+		weed:      weed,
+		urlPrefix: "/fs/",
 	}
 }
 
@@ -58,15 +117,9 @@ type listFileEntry struct {
 }
 
 func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path string) error {
-	keys, err := getAllKeys(f.redisClient, redisKey(path)+"*")
+	names, err := f.kv.List(r.Context(), path)
 	if err != nil {
 		return err
-	}
-	names := make([]string, 0, len(keys))
-	for _, v := range keys {
-		if pf, _ := redisKeyToPath(v); pf != "" {
-			names = append(names, pf)
-		}
 	}
 	sort.Strings(names)
 	w.Write([]byte(strings.Join(names, "\n")))
@@ -110,7 +163,7 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	if path == "" || path[len(path)-1] == '/' {
 		return f.handleList(w, r, path)
 	}
-	fi, err := f.getFileInfo(path)
+	fi, err := f.getFileInfo(r.Context(), path)
 	if err != nil {
 		if err == redis.Nil {
 			http.Error(w, "File not found", http.StatusNotFound)
@@ -143,44 +196,37 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	return nil
 }
 
-func urlToPath(urlpath string) (string, error) {
-	if !strings.HasPrefix(urlpath, "/fs/") {
-		return "", fmt.Errorf("url must start with /fs/")
+func trimOr(s, prefix, what string) (string, error) {
+	if r := strings.TrimPrefix(s, prefix); r != s {
+		return r, nil
 	}
-	return strings.TrimPrefix(urlpath, "/fs/"), nil
+	return "", fmt.Errorf("%s must start with %s, got %s", what, s, prefix)
 }
 
-func redisKey(path string) string {
-	return "fs/" + path
+func (f *filerServer) urlToPath(urlpath string) (string, error) {
+	return trimOr(urlpath, f.urlPrefix, "filer url")
 }
 
-func redisKeyToPath(key string) (string, error) {
-	if !strings.HasPrefix(key, "fs/") {
-		return "", fmt.Errorf("key must start with fs/")
-	}
-	return strings.TrimPrefix(key, "fs/"), nil
-}
-
-func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
-	res, err := f.redisClient.Get(redisKey(path)).Result()
+func (f *filerServer) getFileInfo(ctx context.Context, path string) (*redisFileInfo, error) {
+	res, err := f.kv.Get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
 	var fi redisFileInfo
-	if err = json.Unmarshal([]byte(res), &fi); err != nil {
+	if err = json.Unmarshal(res, &fi); err != nil {
 		return nil, err
 	}
 	return &fi, nil
 }
 
 func (f *filerServer) deleteFile(ctx context.Context, fi *redisFileInfo) error {
-	redisErr := f.redisClient.Del(redisKey(fi.Name)).Err()
+	err := f.kv.Del(ctx, fi.Name)
 	f.deleteChunks(ctx, fi.Chunks)
-	return redisErr
+	return err
 }
 
 func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path string) error {
-	fi, err := f.getFileInfo(path)
+	fi, err := f.getFileInfo(r.Context(), path)
 	if err != nil {
 		if err == redis.Nil {
 			http.Error(w, "File not found", http.StatusNotFound)
@@ -222,7 +268,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
 	}
-	if fi, err := f.getFileInfo(path); err == nil && fi != nil {
+	if fi, err := f.getFileInfo(r.Context(), path); err == nil && fi != nil {
 		if err = f.deleteFile(r.Context(), fi); err != nil {
 			return err
 		}
@@ -295,7 +341,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		f.deleteChunks(r.Context(), fi.Chunks)
 		return nil
 	}
-	if err = f.redisClient.Set(redisKey(path), jb, 0).Err(); err != nil {
+	if err = f.kv.Set(r.Context(), path, jb); err != nil {
 		f.deleteChunks(r.Context(), fi.Chunks)
 		return nil
 	}
@@ -307,7 +353,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path, err := urlToPath(r.URL.Path)
+	path, err := f.urlToPath(r.URL.Path)
 	if err == nil {
 		switch r.Method {
 		case "PUT", "POST":

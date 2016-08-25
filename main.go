@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
 
 	"gopkg.in/redis.v4"
@@ -18,13 +17,16 @@ var (
 
 func main() {
 	flag.Parse()
-	f := NewFiler(redis.NewClient(&redis.Options{
+
+	rc := redis.NewClient(&redis.Options{
 		Addr:     *redisBackend,
 		Password: *redisPassword,
 		DB:       *redisDb,
-	}), &WeedClient{master: "http://localhost:9333"})
+	})
+
+	f := NewFiler(rc, &WeedClient{master: "http://localhost:9333"})
 	ms := metadataServer{
-		redisClient: f.redisClient,
+		redisClient: rc,
 	}
 	http.Handle("/fs/", f)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
