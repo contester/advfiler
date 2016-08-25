@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/base64"
@@ -21,9 +22,13 @@ import (
 	"gopkg.in/redis.v4"
 )
 
+type WeedClient struct {
+	master string
+}
+
 type filerServer struct {
 	redisClient *redis.Client
-	weedMaster  string
+	weed        *WeedClient
 }
 
 const chunksize = 256 * 1024
@@ -35,8 +40,8 @@ type assignResp struct {
 	PublicUrl string `json:"publicUrl"`
 }
 
-func (f *filerServer) uploadChunk(buf []byte) (string, error) {
-	resp, err := http.Get(f.weedMaster + "/dir/assign")
+func (c *WeedClient) Upload(ctx context.Context, buf []byte) (string, error) {
+	resp, err := httpGetC(ctx, c.master+"/dir/assign")
 	if err != nil {
 		return "", err
 	}
@@ -47,9 +52,9 @@ func (f *filerServer) uploadChunk(buf []byte) (string, error) {
 		return "", err
 	}
 
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", "test.dat")
+	body := bytes.NewBuffer(make([]byte, 0, len(buf)+4096))
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "chunk.dat")
 	if err != nil {
 		return "", err
 	}
@@ -57,10 +62,16 @@ func (f *filerServer) uploadChunk(buf []byte) (string, error) {
 		return "", err
 	}
 	writer.Close()
-	resp, err = http.Post("http://"+ar.Url+"/"+ar.Fid, writer.FormDataContentType(), &body)
+	req, err := http.NewRequest(http.MethodPost, weedURL(ar.Url, ar.Fid), body)
 	if err != nil {
 		return "", err
 	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+
 	resp.Body.Close()
 
 	return ar.Fid, nil
@@ -73,8 +84,20 @@ type lookupData struct {
 	} `json:"locations"`
 }
 
-func lookupVolUrl(weedMaster, fid string) (string, error) {
-	resp, err := http.Get(weedMaster + "/dir/lookup?volumeId=" + fid) // fixme
+func weedURL(volume, file string) string {
+	return "http://" + volume + "/" + file
+}
+
+func httpGetC(ctx context.Context, path string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	return http.DefaultClient.Do(req.WithContext(ctx))
+}
+
+func (c *WeedClient) lookupVolume(ctx context.Context, volumeID string) (string, error) {
+	resp, err := httpGetC(ctx, c.master+"/dir/lookup?volumeId="+volumeID)
 	if err != nil {
 		return "", err
 	}
@@ -84,6 +107,14 @@ func lookupVolUrl(weedMaster, fid string) (string, error) {
 		return "", err
 	}
 	return ld.Locations[0].Url, nil
+}
+
+func (c *WeedClient) Get(ctx context.Context, fileID string) (*http.Response, error) {
+	vol, err := c.lookupVolume(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+	return httpGetC(ctx, weedURL(vol, fileID))
 }
 
 type redisChunk struct {
@@ -203,11 +234,7 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	}
 
 	for _, ch := range fi.Chunks {
-		volurl, err := lookupVolUrl(f.weedMaster, ch.Fid)
-		if err != nil {
-			return err
-		}
-		resp, err := http.Get("http://" + volurl + "/" + ch.Fid)
+		resp, err := f.weed.Get(r.Context(), ch.Fid)
 		if err != nil {
 			return err
 		}
@@ -251,17 +278,9 @@ func (f *filerServer) getFileInfo(path string) (*redisFileInfo, error) {
 	return &fi, nil
 }
 
-func (f *filerServer) deleteFile(fi *redisFileInfo) error {
+func (f *filerServer) deleteFile(ctx context.Context, fi *redisFileInfo) error {
 	redisErr := f.redisClient.Del(redisKey(fi.Name)).Err()
-	var wg sync.WaitGroup
-	wg.Add(len(fi.Chunks))
-	for _, ch := range fi.Chunks {
-		go func(fid string) {
-			defer wg.Done()
-			f.deleteChunkFid(fid)
-		}(ch.Fid)
-	}
-	wg.Wait()
+	f.deleteChunks(ctx, fi.Chunks)
 	return redisErr
 }
 
@@ -274,15 +293,19 @@ func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path 
 		}
 		return err
 	}
-	return f.deleteFile(fi)
+	return f.deleteFile(r.Context(), fi)
 }
 
-func deleteChunkURL(url string) error {
-	req, err := http.NewRequest("DELETE", url, nil)
+func (c *WeedClient) Delete(ctx context.Context, fileID string) error {
+	vol, err := c.lookupVolume(ctx, fileID)
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	req, err := http.NewRequest(http.MethodDelete, weedURL(vol, fileID), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -290,18 +313,23 @@ func deleteChunkURL(url string) error {
 	return nil
 }
 
-func (f *filerServer) deleteChunkFid(fid string) error {
-	volurl, err := lookupVolUrl(f.weedMaster, fid)
-	if err != nil {
-		return err
+func (f *filerServer) deleteChunks(ctx context.Context, chunks []redisChunk) error {
+	var wg sync.WaitGroup
+	wg.Add(len(chunks))
+	errs := make([]error, len(chunks))
+	for i, v := range chunks {
+		go func(i int, v redisChunk) {
+			defer wg.Done()
+			errs[i] = f.weed.Delete(ctx, v.Fid)
+		}(i, v)
 	}
-	return deleteChunkURL("http://" + volurl + "/" + fid)
-}
-
-func (f *filerServer) deleteChunks(chunks []redisChunk) {
-	for _, v := range chunks {
-		f.deleteChunkFid(v.Fid)
+	wg.Wait()
+	for _, v := range errs {
+		if v != nil {
+			return v
+		}
 	}
+	return nil
 }
 
 type shortUploadStatus struct {
@@ -317,7 +345,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		return fmt.Errorf("can't upload to directory")
 	}
 	if fi, err := f.getFileInfo(path); err == nil && fi != nil {
-		if err = f.deleteFile(fi); err != nil {
+		if err = f.deleteFile(r.Context(), fi); err != nil {
 			return err
 		}
 	}
@@ -346,7 +374,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		n, err := io.ReadFull(r.Body, buf)
 		if n == 0 {
 			if err != nil && err != io.EOF {
-				f.deleteChunks(fi.Chunks)
+				f.deleteChunks(r.Context(), fi.Chunks)
 				return err
 			}
 			break
@@ -354,9 +382,9 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		buf = buf[0:n]
 		csum := sha1.Sum(buf)
 
-		fid, err := f.uploadChunk(buf)
+		fid, err := f.weed.Upload(r.Context(), buf)
 		if err != nil {
-			f.deleteChunks(fi.Chunks)
+			f.deleteChunks(r.Context(), fi.Chunks)
 			return err
 		}
 		for _, v := range hashes {
@@ -369,7 +397,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		})
 	}
 	if contentLength >= 0 && fi.Size != contentLength {
-		f.deleteChunks(fi.Chunks)
+		f.deleteChunks(r.Context(), fi.Chunks)
 		return nil
 	}
 	fi.Digests = make(map[string]string)
@@ -380,17 +408,17 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 	for k, v := range hashes {
 		fi.Digests[k] = base64.StdEncoding.EncodeToString(v.Sum(nil))
 		if prev, ok := recvDigests[k]; ok && fi.Digests[k] != prev {
-			f.deleteChunks(fi.Chunks)
+			f.deleteChunks(r.Context(), fi.Chunks)
 			return nil
 		}
 	}
 	jb, err := json.Marshal(&fi)
 	if err != nil {
-		f.deleteChunks(fi.Chunks)
+		f.deleteChunks(r.Context(), fi.Chunks)
 		return nil
 	}
 	if err = f.redisClient.Set(redisKey(path), jb, 0).Err(); err != nil {
-		f.deleteChunks(fi.Chunks)
+		f.deleteChunks(r.Context(), fi.Chunks)
 		return nil
 	}
 	ss := shortUploadStatus{
@@ -592,7 +620,7 @@ func main() {
 			Password: *redisPassword,
 			DB:       *redisDb,
 		}),
-		weedMaster: "http://localhost:9333",
+		weed: &WeedClient{master: "http://localhost:9333"},
 	}
 	ms := metadataServer{
 		redisClient: f.redisClient,
