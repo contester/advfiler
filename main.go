@@ -578,15 +578,19 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 var (
 	listen = flag.String("listen", ":9094", "")
+
+	redisBackend  = flag.String("redis", "localhost:6379", "")
+	redisPassword = flag.String("redis_password", "", "")
+	redisDb       = flag.Int("redis_db", 0, "")
 )
 
 func main() {
 	flag.Parse()
 	f := filerServer{
 		redisClient: redis.NewClient(&redis.Options{
-			Addr:     "localhost:6379",
-			Password: "", // no password set
-			DB:       0,  // use default DB
+			Addr:     *redisBackend,
+			Password: *redisPassword,
+			DB:       *redisDb,
 		}),
 		weedMaster: "http://localhost:9333",
 	}
