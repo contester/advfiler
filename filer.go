@@ -19,8 +19,18 @@ import (
 )
 
 type filerServer struct {
-	redisClient *redis.Client
-	weed        *WeedClient
+	redisClient            *redis.Client
+	weed                   *WeedClient
+	urlPrefix, redisPrefix string
+}
+
+func NewFiler(redisClient *redis.Client, weed *WeedClient) *filerServer {
+	return &filerServer{
+		redisClient: redisClient,
+		weed:        weed,
+		urlPrefix:   "fs/",
+		redisPrefix: "fs/",
+	}
 }
 
 const chunksize = 256 * 1024

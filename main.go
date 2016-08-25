@@ -18,19 +18,15 @@ var (
 
 func main() {
 	flag.Parse()
-	f := filerServer{
-		redisClient: redis.NewClient(&redis.Options{
-			Addr:     *redisBackend,
-			Password: *redisPassword,
-			DB:       *redisDb,
-		}),
-		weed: &WeedClient{master: "http://localhost:9333"},
-	}
+	f := NewFiler(redis.NewClient(&redis.Options{
+		Addr:     *redisBackend,
+		Password: *redisPassword,
+		DB:       *redisDb,
+	}), &WeedClient{master: "http://localhost:9333"})
 	ms := metadataServer{
 		redisClient: f.redisClient,
 	}
-	fmt.Println(f.redisClient.Ping().Result())
-	http.Handle("/fs/", &f)
+	http.Handle("/fs/", f)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)
 	http.ListenAndServe(*listen, nil)

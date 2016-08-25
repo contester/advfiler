@@ -9,8 +9,8 @@ func getAllKeys(client *redis.Client, pattern string) ([]string, error) {
 	for {
 		var keys []string
 		var err error
-		keys, cursor, err = client.Scan(cursor, pattern, 100).Result()
-		if err != nil {
+		if keys, cursor, err = client.Scan(cursor, pattern,
+			0).Result(); err != nil {
 			return nil, err
 		}
 		for _, v := range keys {
