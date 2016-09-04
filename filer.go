@@ -31,9 +31,9 @@ type filerServer struct {
 	urlPrefix, redisPrefix string
 }
 
-func NewFiler(redisClient *redis.Client, weed *WeedClient) *filerServer {
+func NewFiler(kv filerKV, weed *WeedClient) *filerServer {
 	return &filerServer{
-		kv:        NewRedisKV(redisClient, "fs/"),
+		kv:        kv,
 		weed:      weed,
 		urlPrefix: "/fs/",
 	}

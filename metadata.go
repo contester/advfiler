@@ -14,9 +14,9 @@ type metadataServer struct {
 	kv filerKV
 }
 
-func NewMetadataServer(client *redis.Client) *metadataServer {
+func NewMetadataServer(kv filerKV) *metadataServer {
 	return &metadataServer{
-		kv: NewRedisKV(client, "problem/"),
+		kv: kv,
 	}
 }
 
@@ -146,6 +146,10 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
+		if err == redis.Nil {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
