@@ -29,7 +29,7 @@ func (s *redisKV) fromInternal(key string) (string, error) {
 }
 
 func (s *redisKV) Get(_ context.Context, key string) ([]byte, error) {
-	fmt.Println(s.toInternal(key))
+	fmt.Println("GET " + s.toInternal(key))
 	res, err := s.client.Get(s.toInternal(key)).Result()
 	if err != nil {
 		return nil, err
@@ -38,6 +38,7 @@ func (s *redisKV) Get(_ context.Context, key string) ([]byte, error) {
 }
 
 func (s *redisKV) List(_ context.Context, prefix string) ([]string, error) {
+	fmt.Println("KEYS " + s.toInternal(prefix) + "*")
 	keys, err := getAllKeys(s.client, s.toInternal(prefix)+"*")
 	if err != nil {
 		return nil, err
