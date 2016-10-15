@@ -71,9 +71,6 @@ func (f *metadataServer) handleDelManifest(w http.ResponseWriter, r *http.Reques
 }
 
 func revKey(id string, rev int) string {
-	if rev == 0 {
-		return id + "/"
-	}
 	return id + "/" + strconv.Itoa(rev)
 }
 
@@ -99,7 +96,7 @@ func (f *metadataServer) getK(ctx context.Context, pk problemKey) ([]problemMani
 }
 
 func (f *metadataServer) buildKeys(ctx context.Context, pk problemKey) ([]string, error) {
-	if pk.Revision == 0 {
+	if pk.Revision != 0 {
 		return []string{revKey(pk.Id, pk.Revision)}, nil
 	}
 	return f.kv.List(ctx, pk.Id)
