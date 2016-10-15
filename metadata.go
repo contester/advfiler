@@ -71,6 +71,9 @@ func (f *metadataServer) handleDelManifest(w http.ResponseWriter, r *http.Reques
 }
 
 func revKey(id string, rev int) string {
+	if rev == 0 {
+		return id + "/"
+	}
 	return id + "/" + strconv.Itoa(rev)
 }
 
