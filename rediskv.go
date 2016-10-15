@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"gopkg.in/redis.v4"
 )
@@ -28,6 +29,7 @@ func (s *redisKV) fromInternal(key string) (string, error) {
 }
 
 func (s *redisKV) Get(_ context.Context, key string) ([]byte, error) {
+	fmt.Println(s.toInternal(key))
 	res, err := s.client.Get(s.toInternal(key)).Result()
 	if err != nil {
 		return nil, err
