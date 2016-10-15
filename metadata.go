@@ -145,7 +145,7 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	fmt.Printf("Parsed key: %+v", pk)
+	fmt.Printf("Parsed key: %+v\n", pk)
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
