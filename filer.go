@@ -119,14 +119,33 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 		}
 		return err
 	}
-	addDigests(w.Header(), fi.Digests)
-	strSize := strconv.FormatInt(fi.Size, 10)
-	w.Header().Add("Content-Length", strSize)
-	w.Header().Add("X-Fs-Content-Length", strSize)
+	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(fi.Size, 10))
 	if fi.ModuleType != "" {
 		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
 	}
 	if r.Method == http.MethodHead {
+		return nil
+	}
+	limitValue := fi.Size
+	if limitStr := r.Header.Get("X-Fs-Limit"); limitStr != "" {
+		lv, err := strconv.ParseInt(limitStr, 10, 64)
+		if err != nil {
+			return err
+		}
+		limitValue = lv
+	}
+	if limitValue > fi.Size {
+		limitValue = fi.Size
+	}
+	if limitValue < fi.Size {
+		w.Header().Add("X-Fs-Truncated", "true")
+	} else {
+		addDigests(w.Header(), fi.Digests)
+	}
+
+	w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
+
+	if limitValue == 0 {
 		return nil
 	}
 
@@ -135,7 +154,9 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(w, resp.Body)
+		lr := io.LimitReader(resp.Body, limitValue)
+		n, err := io.Copy(w, lr)
+		limitValue -= n
 		resp.Body.Close()
 		if err != nil {
 			return err
