@@ -25,15 +25,14 @@ type problemManifest struct {
 	Id       string `json:"id"`
 	Revision int    `json:"revision"`
 
-	TestCount               int              `json:"testCount"`
-	TimeLimitMicros         int64            `json:"timeLimitMicros"`
-	MemoryLimit             int64            `json:"memoryLimit"`
-	Stdio                   bool             `json:"stdio,omitempty"`
-	TesterName              string           `json:"testerName"`
-	Answers                 []int            `json:"answers,omitempty"`
-	InteractorName          string           `json:"interactorName,omitempty"`
-	CombinedHash            string           `json:"combinedHash,omitempty"`
-	TimeLimitMicrosOverride map[string]int64 `json:"timeLimitMicrosOverride"`
+	TestCount       int    `json:"testCount"`
+	TimeLimitMicros int64  `json:"timeLimitMicros"`
+	MemoryLimit     int64  `json:"memoryLimit"`
+	Stdio           bool   `json:"stdio,omitempty"`
+	TesterName      string `json:"testerName"`
+	Answers         []int  `json:"answers,omitempty"`
+	InteractorName  string `json:"interactorName,omitempty"`
+	CombinedHash    string `json:"combinedHash,omitempty"`
 }
 
 type problemKey struct {
@@ -145,8 +144,6 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	fmt.Printf("Parsed key: %+v\n", pk)
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
