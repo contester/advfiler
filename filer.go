@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"gopkg.in/redis.v4"
 )
 
 type filerKV interface {
@@ -113,7 +111,7 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	}
 	fi, err := f.getFileInfo(r.Context(), path)
 	if err != nil {
-		if err == redis.Nil {
+		if err == NotFound {
 			http.NotFound(w, r)
 			return nil
 		}
@@ -194,7 +192,7 @@ func (f *filerServer) deleteFile(ctx context.Context, fi *redisFileInfo) error {
 func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path string) error {
 	fi, err := f.getFileInfo(r.Context(), path)
 	if err != nil {
-		if err == redis.Nil {
+		if err == NotFound {
 			http.NotFound(w, r)
 			return nil
 		}

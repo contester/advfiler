@@ -28,11 +28,18 @@ func (s *redisKV) fromInternal(key string) (string, error) {
 	return trimOr(key, s.prefix, "redis key")
 }
 
+func redisNil(e error) error {
+	if e == redis.Nil {
+		return NotFound
+	}
+	return e
+}
+
 func (s *redisKV) Get(_ context.Context, key string) ([]byte, error) {
 	fmt.Println("GET " + s.toInternal(key))
 	res, err := s.client.Get(s.toInternal(key)).Result()
 	if err != nil {
-		return nil, err
+		return nil, redisNil(err)
 	}
 	return []byte(res), nil
 }
@@ -41,7 +48,7 @@ func (s *redisKV) List(_ context.Context, prefix string) ([]string, error) {
 	fmt.Println("KEYS " + s.toInternal(prefix) + "*")
 	keys, err := getAllKeys(s.client, s.toInternal(prefix)+"*")
 	if err != nil {
-		return nil, err
+		return nil, redisNil(err)
 	}
 	names := make([]string, 0, len(keys))
 	for _, v := range keys {
@@ -56,11 +63,11 @@ func (s *redisKV) List(_ context.Context, prefix string) ([]string, error) {
 }
 
 func (s *redisKV) Del(_ context.Context, key string) error {
-	return s.client.Del(s.toInternal(key)).Err()
+	return redisNil(s.client.Del(s.toInternal(key)).Err())
 }
 
 func (s *redisKV) Set(_ context.Context, key string, value []byte) error {
-	return s.client.Set(s.toInternal(key), value, 0).Err()
+	return redisNil(s.client.Set(s.toInternal(key), value, 0).Err())
 }
 
 func getAllKeys(client *redis.Client, pattern string) ([]string, error) {

@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-
-	"gopkg.in/redis.v4"
 )
 
 type metadataServer struct {
@@ -146,7 +144,7 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
-		if err == redis.Nil {
+		if err == NotFound {
 			http.NotFound(w, r)
 			return
 		}
