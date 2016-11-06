@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/boltdb/bolt"
 )
@@ -33,6 +34,7 @@ func (s *boltKV) Get(_ context.Context, key string) (res []byte, err error) {
 		if r == nil {
 			return NotFound
 		}
+		fmt.Printf("get(%s)\n", key)
 		res = append(res, r...)
 		return nil
 	})
@@ -44,6 +46,7 @@ func (s *boltKV) List(_ context.Context, prefix string) (res []string, err error
 		c := tx.Bucket(s.bucket).Cursor()
 		pr := []byte(prefix)
 		for k, _ := c.Seek(pr); bytes.HasPrefix(k, pr); k, _ = c.Next() {
+			fmt.Printf("listed: %s\n", string(k))
 			res = append(res, string(k))
 		}
 		return nil
