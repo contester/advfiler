@@ -11,7 +11,7 @@ import (
 	"strconv"
 )
 
-func exportAll(base, path, archive string) error {
+func exportAll(base, path string) error {
 	resp, err := http.Get(base + path)
 	if err != nil {
 		return err
@@ -26,13 +26,7 @@ func exportAll(base, path, archive string) error {
 		return err
 	}
 
-	f, err := os.Create(archive)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	fw := tar.NewWriter(f)
+	fw := tar.NewWriter(os.Stdout)
 	defer fw.Close()
 	for _, v := range files {
 		if err = export1(base, v, fw); err != nil {
@@ -41,6 +35,28 @@ func exportAll(base, path, archive string) error {
 	}
 
 	return nil
+}
+
+func importAll(base string) error {
+	fr := tar.NewReader(os.Stdin)
+	for {
+		h, err := fr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		req, err := http.NewRequest(http.MethodPut, base+h.Name, fr)
+		if err != nil {
+			return err
+		}
+		if mn := h.Xattrs["user.fs_module_type"]; mn != "" {
+			req.Header.Add("X-FS-Module-Type", mn)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		resp.Body.Close()
+	}
 }
 
 func export1(base, path string, fw *tar.Writer) error {
@@ -72,11 +88,20 @@ func export1(base, path string, fw *tar.Writer) error {
 }
 
 var (
-	backend = flag.String("backend", "", "")
-	arcp    = flag.String("archive", "", "")
+	backend  = flag.String("backend", "", "")
+	modeFlag = flag.String("mode", "", "")
 )
 
 func main() {
 	flag.Parse()
-	fmt.Println(exportAll(*backend, flag.Arg(0), *arcp))
+	var err error
+	switch *modeFlag {
+	case "export":
+		err = exportAll(*backend, flag.Arg(0))
+	case "import":
+		err = importAll(*backend)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s", err)
+	}
 }
