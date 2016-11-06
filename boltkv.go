@@ -52,7 +52,7 @@ func (s *boltKV) List(_ context.Context, prefix string) (res []string, err error
 }
 
 func (s *boltKV) Del(_ context.Context, key string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.db.Batch(func(tx *bolt.Tx) error {
 		return tx.Bucket(s.bucket).Delete([]byte(key))
 	})
 }

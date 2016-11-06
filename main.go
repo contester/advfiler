@@ -38,6 +38,7 @@ func main() {
 			log.Fatal(err)
 		}
 		defer db.Close()
+		db.NoSync = true
 		fiKV = NewBoltKV(db, "fs")
 		meKV = NewBoltKV(db, "problems")
 	} else {
