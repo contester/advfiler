@@ -45,7 +45,7 @@ func (s *boltKV) List(_ context.Context, prefix string) (res []string, err error
 	err = s.db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket(s.bucket).Cursor()
 		pr := []byte(prefix)
-		for k, _ := c.Seek(pr); bytes.HasPrefix(k, pr); k, _ = c.Next() {
+		for k, _ := c.Seek(pr); k != nil && bytes.HasPrefix(k, pr); k, _ = c.Next() {
 			fmt.Printf("listed: %s\n", string(k))
 			res = append(res, string(k))
 		}
