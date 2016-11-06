@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "Vw77VGlwiPNNoCPc+lKVeQWcKK4=",
+			"path": "github.com/boltdb/bolt",
+			"revision": "4b1ebc1869ad66568b313d0dc410e2be72670dda",
+			"revisionTime": "2016-10-28T19:36:45Z"
+		},
+		{
 			"checksumSHA1": "+4r0PnLwwyhO5/jvU5R/TEJb4kA=",
 			"path": "gopkg.in/bsm/ratelimit.v1",
 			"revision": "db14e161995a5177acef654cb0dd785e8ee8bc22",
