@@ -2,8 +2,11 @@ package main
 
 import (
 	"flag"
+	"log"
 	"net/http"
+	"time"
 
+	"github.com/boltdb/bolt"
 	"gopkg.in/redis.v4"
 )
 
@@ -20,27 +23,44 @@ var (
 
 	redisDbProblems     = flag.Int("redis_db_problems", 0, "Redis DB for problems")
 	redisPrefixProblems = flag.String("redis_prefix_problems", "problem/", "Prefix for redis keys for problems")
+
+	boltDb = flag.String("bolt", "", "Bolt file name")
 )
 
 func main() {
 	flag.Parse()
 
-	rc1 := redis.NewClient(&redis.Options{
-		Addr:     *redisBackend,
-		Password: *redisPassword,
-		DB:       *redisDbFiles,
-	})
-	defer rc1.Close()
+	var fiKV, meKV filerKV
 
-	rc2 := redis.NewClient(&redis.Options{
-		Addr:     *redisBackend,
-		Password: *redisPassword,
-		DB:       *redisDbProblems,
-	})
-	defer rc2.Close()
+	if *boltDb != "" {
+		db, err := bolt.Open(*boltDb, 0600, &bolt.Options{Timeout: 1 * time.Second})
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
+		fiKV = NewBoltKV(db, "fs")
+		meKV = NewBoltKV(db, "problems")
+	} else {
 
-	f := NewFiler(NewRedisKV(rc1, *redisPrefixFiles), &WeedClient{master: *weedBackend})
-	ms := NewMetadataServer(NewRedisKV(rc2, *redisPrefixProblems))
+		rc1 := redis.NewClient(&redis.Options{
+			Addr:     *redisBackend,
+			Password: *redisPassword,
+			DB:       *redisDbFiles,
+		})
+		defer rc1.Close()
+
+		rc2 := redis.NewClient(&redis.Options{
+			Addr:     *redisBackend,
+			Password: *redisPassword,
+			DB:       *redisDbProblems,
+		})
+		defer rc2.Close()
+		fiKV = NewRedisKV(rc1, *redisPrefixFiles)
+		meKV = NewRedisKV(rc2, *redisPrefixProblems)
+	}
+
+	f := NewFiler(fiKV, &WeedClient{master: *weedBackend})
+	ms := NewMetadataServer(meKV)
 	http.Handle("/fs/", f)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)
