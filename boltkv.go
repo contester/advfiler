@@ -14,10 +14,15 @@ type boltKV struct {
 }
 
 func NewBoltKV(db *bolt.DB, bucket string) *boltKV {
-	return &boltKV{
+	s := &boltKV{
 		db:     db,
 		bucket: []byte(bucket),
 	}
+	s.db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(s.bucket)
+		return err
+	})
+	return s
 }
 
 var NotFound = errors.New("not found")
