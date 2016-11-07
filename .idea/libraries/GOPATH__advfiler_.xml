@@ -1,19 +1,17 @@
 <component name="libraryTable">
   <library name="GOPATH &lt;advfiler&gt;">
     <CLASSES>
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/git.stingr.net" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/github.com" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/gopkg.in" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/golang.org" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/google.golang.org" />
+      <root url="file://$PROJECT_DIR$/../../../golang.org" />
+      <root url="file://$PROJECT_DIR$/../.." />
+      <root url="file://$PROJECT_DIR$/../../../gopkg.in" />
+      <root url="file://$PROJECT_DIR$/../../../github.com" />
     </CLASSES>
     <JAVADOC />
     <SOURCES>
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/git.stingr.net" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/github.com" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/gopkg.in" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/golang.org" />
-      <root url="file://$PROJECT_DIR$/../../../../../go6/src/google.golang.org" />
+      <root url="file://$PROJECT_DIR$/../../../golang.org" />
+      <root url="file://$PROJECT_DIR$/../.." />
+      <root url="file://$PROJECT_DIR$/../../../gopkg.in" />
+      <root url="file://$PROJECT_DIR$/../../../github.com" />
     </SOURCES>
     <excluded>
       <root url="file://$PROJECT_DIR$" />

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gopkg.in/redis.v4"
+	"github.com/golang/protobuf/proto"
 )
 
 type redisKV struct {
@@ -104,4 +105,12 @@ func KVGetJson(ctx context.Context, kv GetKV, key string, value interface{}) err
 		return err
 	}
 	return json.Unmarshal(res, value)
+}
+
+func KVGetProto(ctx context.Context, kv GetKV, key string, value proto.Message) error {
+	res, err := kv.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+	return proto.Unmarshal(res, value)
 }

@@ -14,6 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	pb "git.stingr.net/stingray/advfiler/protos"
+	"github.com/golang/protobuf/proto"
 )
 
 type filerKV interface {
@@ -39,28 +42,6 @@ func NewFiler(kv filerKV, weed *WeedClient) *filerServer {
 
 const chunksize = 256 * 1024
 
-type redisChunk struct {
-	Fid     string
-	Sha1sum []byte
-	Size    int64 `json:",omitempty"`
-}
-
-type redisFileInfo struct {
-	Name       string
-	Size       int64
-	Digests    map[string]string
-	ModuleType string `json:",omitempty"`
-	Chunks     []redisChunk
-}
-
-type fileList struct {
-	Entries []listFileEntry
-}
-
-type listFileEntry struct {
-	Name string
-}
-
 func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path string) error {
 	names, err := f.kv.List(r.Context(), path)
 	if err != nil {
@@ -74,6 +55,22 @@ func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path st
 	}
 	return json.NewEncoder(w).Encode(&wr)*/
 	return nil
+}
+
+func maybeSetDigest(m map[string]string, name string, value []byte) {
+	if len(value) > 0 {
+		m[name] = base64.StdEncoding.EncodeToString(value)
+	}
+}
+
+func digestsToMap(d *pb.FileInfo_Digests) map[string]string {
+	if d == nil {
+		return nil
+	}
+	r := make(map[string]string)
+	maybeSetDigest(r, "MD5", d.Md5)
+	maybeSetDigest(r, "SHA", d.Sha1)
+	return r
 }
 
 func addDigests(h http.Header, digests map[string]string) {
@@ -117,14 +114,14 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 		}
 		return err
 	}
-	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(fi.Size, 10))
+	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(fi.Size_, 10))
 	if fi.ModuleType != "" {
 		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
 	}
 	if r.Method == http.MethodHead {
 		return nil
 	}
-	limitValue := fi.Size
+	limitValue := fi.Size_
 	if limitStr := r.Header.Get("X-Fs-Limit"); limitStr != "" {
 		lv, err := strconv.ParseInt(limitStr, 10, 64)
 		if err != nil {
@@ -132,13 +129,13 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 		}
 		limitValue = lv
 	}
-	if limitValue > fi.Size {
-		limitValue = fi.Size
+	if limitValue > fi.Size_ {
+		limitValue = fi.Size_
 	}
-	if limitValue < fi.Size {
+	if limitValue < fi.Size_ {
 		w.Header().Add("X-Fs-Truncated", "true")
 	} else {
-		addDigests(w.Header(), fi.Digests)
+		addDigests(w.Header(), digestsToMap(fi.Digests))
 	}
 
 	w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
@@ -175,16 +172,16 @@ func (f *filerServer) urlToPath(urlpath string) (string, error) {
 	return trimOr(urlpath, f.urlPrefix, "filer url")
 }
 
-func (f *filerServer) getFileInfo(ctx context.Context, path string) (*redisFileInfo, error) {
-	var fi redisFileInfo
-	if err := KVGetJson(ctx, f.kv, path, &fi); err != nil {
+func (f *filerServer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
+	var fi pb.FileInfo
+	if err := KVGetProto(ctx, f.kv, path, &fi); err != nil {
 		return nil, err
 	}
 	return &fi, nil
 }
 
-func (f *filerServer) deleteFile(ctx context.Context, fi *redisFileInfo) error {
-	err := f.kv.Del(ctx, fi.Name)
+func (f *filerServer) deleteFile(ctx context.Context, name string, fi *pb.FileInfo) error {
+	err := f.kv.Del(ctx, name)
 	f.deleteChunks(ctx, fi.Chunks)
 	return err
 }
@@ -198,15 +195,15 @@ func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path 
 		}
 		return err
 	}
-	return f.deleteFile(r.Context(), fi)
+	return f.deleteFile(r.Context(), path, fi)
 }
 
-func (f *filerServer) deleteChunks(ctx context.Context, chunks []redisChunk) error {
+func (f *filerServer) deleteChunks(ctx context.Context, chunks []*pb.FileChunk) error {
 	var wg sync.WaitGroup
 	wg.Add(len(chunks))
 	errs := make([]error, len(chunks))
 	for i, v := range chunks {
-		go func(i int, v redisChunk) {
+		go func(i int, v *pb.FileChunk) {
 			defer wg.Done()
 			errs[i] = f.weed.Delete(ctx, v.Fid)
 		}(i, v)
@@ -225,6 +222,31 @@ type shortUploadStatus struct {
 	Size    int64
 }
 
+type allHashes struct {
+	sha1, md5 hash.Hash
+}
+
+func (s *allHashes) Write(p []byte) (n int, err error) {
+	if n, err = s.md5.Write(p); err != nil {
+		return n, err
+	}
+	return s.sha1.Write(p)
+}
+
+func (s *allHashes) toDigests() *pb.FileInfo_Digests {
+	return &pb.FileInfo_Digests{
+		Md5: s.md5.Sum(nil),
+		Sha1: s.sha1.Sum(nil),
+	}
+}
+
+func newHashes() *allHashes {
+	return &allHashes{
+		sha1: sha1.New(),
+		md5: md5.New(),
+	}
+}
+
 func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" {
 		return fmt.Errorf("can't upload to empty path")
@@ -233,19 +255,15 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		return fmt.Errorf("can't upload to directory")
 	}
 	if fi, err := f.getFileInfo(r.Context(), path); err == nil && fi != nil {
-		if err = f.deleteFile(r.Context(), fi); err != nil {
+		if err = f.deleteFile(r.Context(), path, fi); err != nil {
 			return err
 		}
 	}
 
-	fi := redisFileInfo{
-		Name:       path,
+	fi := pb.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 	}
-	hashes := map[string]hash.Hash{
-		"MD5": md5.New(),
-		"SHA": sha1.New(),
-	}
+	hashes := newHashes()
 
 	contentLength := int64(-1)
 
@@ -275,44 +293,42 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 			f.deleteChunks(r.Context(), fi.Chunks)
 			return err
 		}
-		for _, v := range hashes {
-			v.Write(buf)
-		}
-		fi.Size += int64(n)
-		fi.Chunks = append(fi.Chunks, redisChunk{
+		hashes.Write(buf)
+		fi.Size_ += int64(n)
+		fi.Chunks = append(fi.Chunks, &pb.FileChunk{
 			Fid:     fid,
-			Sha1sum: csum[:],
-			Size:    int64(n),
+			Sha1Sum: csum[:],
+			Size_:    int64(n),
 		})
 	}
-	if contentLength >= 0 && fi.Size != contentLength {
+	if contentLength >= 0 && fi.Size_ != contentLength {
 		f.deleteChunks(r.Context(), fi.Chunks)
 		return nil
 	}
-	fi.Digests = make(map[string]string)
+	fi.Digests = hashes.toDigests()
 	recvDigests := parseDigests(r.Header.Get("Digest"))
 	if ch := r.Header.Get("Content-MD5"); ch != "" {
 		recvDigests["MD5"] = ch
 	}
-	for k, v := range hashes {
-		fi.Digests[k] = base64.StdEncoding.EncodeToString(v.Sum(nil))
-		if prev, ok := recvDigests[k]; ok && fi.Digests[k] != prev {
+	stDigests := digestsToMap(fi.Digests)
+	for k, v := range stDigests {
+		if prev, ok := recvDigests[k]; ok && v != prev {
 			f.deleteChunks(r.Context(), fi.Chunks)
-			return nil
+			return fmt.Errorf("checksum mismatch")
 		}
 	}
-	jb, err := json.Marshal(&fi)
+	prb, err := proto.Marshal(&fi)
 	if err != nil {
 		f.deleteChunks(r.Context(), fi.Chunks)
-		return nil
+		return err
 	}
-	if err = f.kv.Set(r.Context(), path, jb); err != nil {
+	if err = f.kv.Set(r.Context(), path, prb); err != nil {
 		f.deleteChunks(r.Context(), fi.Chunks)
-		return nil
+		return err
 	}
 	ss := shortUploadStatus{
-		Digests: fi.Digests,
-		Size:    fi.Size,
+		Digests: stDigests,
+		Size:    fi.Size_,
 	}
 	return json.NewEncoder(w).Encode(&ss)
 }
