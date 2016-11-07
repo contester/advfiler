@@ -1,0 +1,22 @@
+<component name="libraryTable">
+  <library name="GOPATH &lt;advfiler&gt;">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/git.stingr.net" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/github.com" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/gopkg.in" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/golang.org" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/google.golang.org" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/git.stingr.net" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/github.com" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/gopkg.in" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/golang.org" />
+      <root url="file://$PROJECT_DIR$/../../../../../go6/src/google.golang.org" />
+    </SOURCES>
+    <excluded>
+      <root url="file://$PROJECT_DIR$" />
+    </excluded>
+  </library>
+</component>
