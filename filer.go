@@ -122,6 +122,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
 	}
 	if r.Method == http.MethodHead {
+		addDigests(w.Header(), digestsToMap(fi.Digests))
 		return nil
 	}
 	limitValue := fi.Size_
