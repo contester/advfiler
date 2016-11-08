@@ -15,8 +15,9 @@ import (
 	"strings"
 	"sync"
 
-	pb "git.stingr.net/stingray/advfiler/protos"
 	"github.com/golang/protobuf/proto"
+
+	pb "git.stingr.net/stingray/advfiler/protos"
 )
 
 type filerKV interface {
