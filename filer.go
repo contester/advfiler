@@ -42,8 +42,8 @@ func NewFiler(kv filerKV, weed *WeedClient) *filerServer {
 
 const chunksize = 256 * 1024
 
-func (f *filerServer) handleList(w http.ResponseWriter, r *http.Request, path string) error {
-	names, err := f.kv.List(r.Context(), path)
+func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+	names, err := f.kv.List(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -70,6 +70,9 @@ func digestsToMap(d *pb.FileInfo_Digests) map[string]string {
 	r := make(map[string]string)
 	maybeSetDigest(r, "MD5", d.Md5)
 	maybeSetDigest(r, "SHA", d.Sha1)
+	if len(r) == 0 {
+		return nil
+	}
 	return r
 }
 
@@ -102,11 +105,11 @@ func parseDigests(dh string) map[string]string {
 	return result
 }
 
-func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, path string) error {
+func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" || path[len(path)-1] == '/' {
-		return f.handleList(w, r, path)
+		return f.handleList(ctx, w, r, path)
 	}
-	fi, err := f.getFileInfo(r.Context(), path)
+	fi, err := f.getFileInfo(ctx, path)
 	if err != nil {
 		if err == NotFound {
 			http.NotFound(w, r)
@@ -145,7 +148,7 @@ func (f *filerServer) handleDownload(w http.ResponseWriter, r *http.Request, pat
 	}
 
 	for _, ch := range fi.Chunks {
-		resp, err := f.weed.Get(r.Context(), ch.Fid)
+		resp, err := f.weed.Get(ctx, ch.Fid)
 		if err != nil {
 			return err
 		}
@@ -186,8 +189,8 @@ func (f *filerServer) deleteFile(ctx context.Context, name string, fi *pb.FileIn
 	return err
 }
 
-func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path string) error {
-	fi, err := f.getFileInfo(r.Context(), path)
+func (f *filerServer) handleDelete(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+	fi, err := f.getFileInfo(ctx, path)
 	if err != nil {
 		if err == NotFound {
 			http.NotFound(w, r)
@@ -195,7 +198,7 @@ func (f *filerServer) handleDelete(w http.ResponseWriter, r *http.Request, path 
 		}
 		return err
 	}
-	return f.deleteFile(r.Context(), path, fi)
+	return f.deleteFile(ctx, path, fi)
 }
 
 func (f *filerServer) deleteChunks(ctx context.Context, chunks []*pb.FileChunk) error {
@@ -247,15 +250,15 @@ func newHashes() *allHashes {
 	}
 }
 
-func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path string) error {
+func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" {
 		return fmt.Errorf("can't upload to empty path")
 	}
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
 	}
-	if fi, err := f.getFileInfo(r.Context(), path); err == nil && fi != nil {
-		if err = f.deleteFile(r.Context(), path, fi); err != nil {
+	if fi, err := f.getFileInfo(ctx, path); err == nil && fi != nil {
+		if err = f.deleteFile(ctx, path, fi); err != nil {
 			return err
 		}
 	}
@@ -280,7 +283,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		n, err := io.ReadFull(r.Body, buf)
 		if n == 0 {
 			if err != nil && err != io.EOF {
-				f.deleteChunks(r.Context(), fi.Chunks)
+				f.deleteChunks(ctx, fi.Chunks)
 				return err
 			}
 			break
@@ -288,9 +291,9 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		buf = buf[0:n]
 		csum := sha1.Sum(buf)
 
-		fid, err := f.weed.Upload(r.Context(), buf)
+		fid, err := f.weed.Upload(ctx, buf)
 		if err != nil {
-			f.deleteChunks(r.Context(), fi.Chunks)
+			f.deleteChunks(ctx, fi.Chunks)
 			return err
 		}
 		hashes.Write(buf)
@@ -302,7 +305,7 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 		})
 	}
 	if contentLength >= 0 && fi.Size_ != contentLength {
-		f.deleteChunks(r.Context(), fi.Chunks)
+		f.deleteChunks(ctx, fi.Chunks)
 		return nil
 	}
 	fi.Digests = hashes.toDigests()
@@ -313,17 +316,17 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 	stDigests := digestsToMap(fi.Digests)
 	for k, v := range stDigests {
 		if prev, ok := recvDigests[k]; ok && v != prev {
-			f.deleteChunks(r.Context(), fi.Chunks)
+			f.deleteChunks(ctx, fi.Chunks)
 			return fmt.Errorf("checksum mismatch")
 		}
 	}
 	prb, err := proto.Marshal(&fi)
 	if err != nil {
-		f.deleteChunks(r.Context(), fi.Chunks)
+		f.deleteChunks(ctx, fi.Chunks)
 		return err
 	}
-	if err = f.kv.Set(r.Context(), path, prb); err != nil {
-		f.deleteChunks(r.Context(), fi.Chunks)
+	if err = f.kv.Set(ctx, path, prb); err != nil {
+		f.deleteChunks(ctx, fi.Chunks)
 		return err
 	}
 	ss := shortUploadStatus{
@@ -336,13 +339,14 @@ func (f *filerServer) handleUpload(w http.ResponseWriter, r *http.Request, path 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path, err := f.urlToPath(r.URL.Path)
 	if err == nil {
+		ctx := r.Context()
 		switch r.Method {
-		case "PUT", "POST":
-			err = f.handleUpload(w, r, path)
-		case "GET", "HEAD":
-			err = f.handleDownload(w, r, path)
-		case "DELETE":
-			err = f.handleDelete(w, r, path)
+		case http.MethodPut, http.MethodPost:
+			err = f.handleUpload(ctx, w, r, path)
+		case http.MethodGet, http.MethodHead:
+			err = f.handleDownload(ctx, w, r, path)
+		case http.MethodDelete:
+			err = f.handleDelete(ctx, w, r, path)
 		default:
 			http.Error(w, "", http.StatusMethodNotAllowed)
 		}
