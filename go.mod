@@ -3,7 +3,6 @@ module git.stingr.net/stingray/advfiler
 require (
 	git.sgu.ru/sgu/systemdutil v0.0.0-20180813152046-df705fc6ca68
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
-	github.com/boltdb/bolt v1.3.1
 	github.com/coreos/go-systemd v0.0.0-20180828140353-eee3db372b31
 	github.com/gogo/protobuf v1.1.1
 	github.com/golang/protobuf v1.2.0
@@ -19,6 +18,4 @@ require (
 	golang.org/x/crypto v0.0.0-20180910181607-0e37d006457b // indirect
 	golang.org/x/net v0.0.0-20180921000356-2f5d2388922f
 	golang.org/x/sys v0.0.0-20180920110915-d641721ec2de // indirect
-	gopkg.in/bsm/ratelimit.v1 v1.0.0-20160220154919-db14e161995a // indirect
-	gopkg.in/redis.v4 v4.2.4
 )
