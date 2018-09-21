@@ -1,4 +1,4 @@
-package main
+package main // import "git.stingr.net/stingray/advfiler"
 
 import (
 	"flag"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/boltdb/bolt"
+	bolt "go.etcd.io/bbolt"
 	"gopkg.in/redis.v4"
 )
 

@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/boltdb/bolt"
+	bolt "go.etcd.io/bbolt"
 )
 
 type boltKV struct {
