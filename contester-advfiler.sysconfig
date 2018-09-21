@@ -1,0 +1,3 @@
+ADVFILER_BOLT_DB="/var/lib/contester-advfiler/data.db"
+#ADVFILER_WEED_BACKEND=""
+#LISTEN_HTTP=""

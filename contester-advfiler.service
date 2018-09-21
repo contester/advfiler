@@ -1,0 +1,16 @@
+[Unit]
+Description=contester-advfiler
+After=local-fs.target network.target
+Requires=local-fs.target network.target
+
+[Service]
+EnvironmentFile=/etc/sysconfig/contester-advfiler
+ExecStart=/usr/bin/contester-advfiler -bolt /var/lib/contester-advfiler/data.db
+Restart=on-failure
+User=contester-advfiler
+Group=contester-advfiler
+Type=notify
+
+[Install]
+WantedBy=multi-user.target
+

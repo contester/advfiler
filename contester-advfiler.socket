@@ -1,0 +1,8 @@
+[Unit]
+Description=Contester filer
+ 
+[Socket]
+ListenStream=9094
+ 
+[Install]
+WantedBy=sockets.target
