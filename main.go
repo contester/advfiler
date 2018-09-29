@@ -61,6 +61,7 @@ func main() {
 	f := NewFiler(fiKV, &WeedClient{master: config.WeedBackend})
 	ms := NewMetadataServer(meKV)
 	http.Handle("/fs/", f)
+	http.HandleFunc("/fs2/", f.HandlePackage)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)
 	for _, s := range httpSockets {

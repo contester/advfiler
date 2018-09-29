@@ -359,27 +359,53 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 	cout := zip.NewWriter(w)
 	defer cout.Close()
 	for _, entry := range mdreq.Entry {
-		fi, err := f.getFileInfo(ctx, entry.Source)
-		if err != nil {
-			continue
-		}
-		fh := zip.FileHeader{
-			Name:               entry.Destination,
-			UncompressedSize64: uint64(fi.Size_),
-			Method:             zip.Deflate,
-		}
-		if fi.ModuleType != "" {
-			fh.Name += "." + fi.ModuleType
-		}
-		wr, err := cout.CreateHeader(&fh)
-		if err != nil {
-			return err
-		}
-		if err := f.writeChunks(ctx, wr, fi.Chunks, fi.Size_); err != nil {
-			return err
-		}
+		f.writeRemoteFileAs(ctx, cout, entry.Source, entry.Destination)
 	}
 	return nil
+}
+
+func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
+	fi, err := f.getFileInfo(ctx, name)
+	if err != nil {
+		return err
+	}
+	fh := zip.FileHeader{
+		Name:               as,
+		UncompressedSize64: uint64(fi.Size_),
+		Method:             zip.Deflate,
+	}
+	if fi.ModuleType != "" {
+		fh.Name += "." + fi.ModuleType
+	}
+	wr, err := w.CreateHeader(&fh)
+	if err != nil {
+		return err
+	}
+	return f.writeChunks(ctx, wr, fi.Chunks, fi.Size_)
+}
+
+func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
+	cout := zip.NewWriter(w)
+	defer cout.Close()
+
+	contestID := r.FormValue("contest")
+	submitID := r.FormValue("submit")
+	testingID := r.FormValue("testing")
+
+	if contestID != "" && submitID != "" && testingID != "" {
+		names, _ := f.kv.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
+		for _, name := range names {
+			splits := strings.Split(name, "/")
+			if len(splits) < 5 {
+				continue
+			}
+			if splits[len(splits)-1] != "output" {
+				continue
+			}
+			f.writeRemoteFileAs(r.Context(), cout, name, splits[len(splits)-2]+".o")
+		}
+		f.writeRemoteFileAs(r.Context(), cout, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
+	}
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
