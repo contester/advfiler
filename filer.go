@@ -434,6 +434,7 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 			f.writeRemoteFileAs(r.Context(), cout, name, splits[len(splits)-2]+".o")
 		}
 		f.writeRemoteFileAs(r.Context(), cout, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
+		f.writeRemoteFileAs(r.Context(), cout, "submit/"+contestID+"/"+submitID+"/sourceModule", "solution")
 	}
 
 	if problemID := r.FormValue("problem"); problemID != "" {
