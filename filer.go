@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/md5"
 	"crypto/sha1"
@@ -106,6 +107,23 @@ func parseDigests(dh string) map[string]string {
 	return result
 }
 
+func (f *filerServer) writeChunks(ctx context.Context, w io.Writer, chunks []*pb.FileChunk, limitValue int64) error {
+	for _, ch := range chunks {
+		resp, err := f.weed.Get(ctx, ch.Fid)
+		if err != nil {
+			return err
+		}
+		lr := io.LimitReader(resp.Body, limitValue)
+		n, err := io.Copy(w, lr)
+		limitValue -= n
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" || path[len(path)-1] == '/' {
 		return f.handleList(ctx, w, r, path)
@@ -148,22 +166,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 	if limitValue == 0 {
 		return nil
 	}
-
-	for _, ch := range fi.Chunks {
-		resp, err := f.weed.Get(ctx, ch.Fid)
-		if err != nil {
-			return err
-		}
-		lr := io.LimitReader(resp.Body, limitValue)
-		n, err := io.Copy(w, lr)
-		limitValue -= n
-		resp.Body.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return f.writeChunks(ctx, w, fi.Chunks, limitValue)
 }
 
 func trimOr(s, prefix, what string) (string, error) {
@@ -240,7 +243,7 @@ func (s *allHashes) Write(p []byte) (n int, err error) {
 
 func (s *allHashes) toDigests() *pb.FileInfo_Digests {
 	return &pb.FileInfo_Digests{
-		Md5: s.md5.Sum(nil),
+		Md5:  s.md5.Sum(nil),
 		Sha1: s.sha1.Sum(nil),
 	}
 }
@@ -248,13 +251,13 @@ func (s *allHashes) toDigests() *pb.FileInfo_Digests {
 func newHashes() *allHashes {
 	return &allHashes{
 		sha1: sha1.New(),
-		md5: md5.New(),
+		md5:  md5.New(),
 	}
 }
 
 func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" {
-		return fmt.Errorf("can't upload to empty path")
+		return f.handleMultiDownload(ctx, w, r)
 	}
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
@@ -303,7 +306,7 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 		fi.Chunks = append(fi.Chunks, &pb.FileChunk{
 			Fid:     fid,
 			Sha1Sum: csum[:],
-			Size_:    int64(n),
+			Size_:   int64(n),
 		})
 	}
 	if contentLength >= 0 && fi.Size_ != contentLength {
@@ -336,6 +339,47 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 		Size:    fi.Size_,
 	}
 	return json.NewEncoder(w).Encode(&ss)
+}
+
+type singleDownloadEntry struct {
+	Source      string
+	Destination string
+}
+
+type multiDownloadRequest struct {
+	Entry []singleDownloadEntry
+}
+
+func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	decoder := json.NewDecoder(r.Body)
+	var mdreq multiDownloadRequest
+	if err := decoder.Decode(&mdreq); err != nil {
+		return err
+	}
+	cout := zip.NewWriter(w)
+	defer cout.Close()
+	for _, entry := range mdreq.Entry {
+		fi, err := f.getFileInfo(ctx, entry.Source)
+		if err != nil {
+			continue
+		}
+		fh := zip.FileHeader{
+			Name:               entry.Destination,
+			UncompressedSize64: uint64(fi.Size_),
+			Method:             zip.Deflate,
+		}
+		if fi.ModuleType != "" {
+			fh.Name += "." + fi.ModuleType
+		}
+		wr, err := cout.CreateHeader(&fh)
+		if err != nil {
+			return err
+		}
+		if err := f.writeChunks(ctx, wr, fi.Chunks, fi.Size_); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
