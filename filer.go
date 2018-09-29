@@ -384,6 +384,35 @@ func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name
 	return f.writeChunks(ctx, wr, fi.Chunks, fi.Size_)
 }
 
+func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
+	prefix := "problem/" + problemID + "/"
+	names, _ := f.kv.List(ctx, prefix)
+	for _, name := range names {
+		pname := strings.TrimPrefix(name, prefix)
+		if pname == "checker" {
+			f.writeRemoteFileAs(ctx, w, name, "checker")
+			continue
+		}
+		splits := strings.Split(pname, "/")
+		if len(splits) != 3 || splits[0] != "tests" {
+			continue
+		}
+		var dname string
+		switch splits[2] {
+		case "input.txt":
+			dname = splits[1]
+		case "answer.txt":
+			dname = splits[1] + ".a"
+		}
+		if dname == "" {
+			continue
+		}
+		f.writeRemoteFileAs(ctx, w, name, dname)
+	}
+
+	return nil
+}
+
 func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 	cout := zip.NewWriter(w)
 	defer cout.Close()
@@ -405,6 +434,10 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 			f.writeRemoteFileAs(r.Context(), cout, name, splits[len(splits)-2]+".o")
 		}
 		f.writeRemoteFileAs(r.Context(), cout, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
+	}
+
+	if problemID := r.FormValue("problem"); problemID != "" {
+		f.writeProblemData(r.Context(), cout, problemID)
 	}
 }
 
