@@ -2,29 +2,28 @@ syntax = "proto3";
 
 package protos;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-
-option (gogoproto.equal_all) = true;
-option (gogoproto.goproto_stringer_all) = false;
-option (gogoproto.stringer_all) =  true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.gogoproto_import) = false;
-
 message FileChunk {
     string fid = 1;
     bytes sha1sum = 2;
     int64 size = 3;
 }
 
+message Digests {
+    bytes sha1 = 1;
+    bytes md5 = 2;
+};
+
 message FileInfo {
     int64 size = 1;
-    message Digests {
-        bytes sha1 = 1;
-        bytes md5 = 2;
-    };
     Digests digests = 2;
     string module_type = 3;
     repeated FileChunk chunks = 4;
+}
+
+message FileInfo64 {
+    int64 size = 1;
+    Digests digests = 2;
+    string module_type = 3;
+    bytes inline_data = 5;
+    repeated int64 chunks = 6;
 }

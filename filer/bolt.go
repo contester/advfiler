@@ -1,14 +1,12 @@
-package main
+package filer
 
 import (
 	"archive/zip"
 	"context"
-	"crypto/md5"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"io"
 	"net/http"
 	"sort"
@@ -21,19 +19,34 @@ import (
 	pb "git.stingr.net/stingray/advfiler/protos"
 )
 
-type filerServer struct {
-	backend filer.Backend
-	urlPrefix string
+type filerKV interface {
+	Get(ctx context.Context, key string) ([]byte, error)
+	List(ctx context.Context, prefix string) ([]string, error)
+	Del(ctx context.Context, key string) error
+	Set(ctx context.Context, key string, value []byte) error
 }
 
-func NewFiler(backend Backend) *filerServer {
-	return &filerServer{
-		backend: backend,
+type WeedClient interface {
+	Get(ctx context.Context, fileID string) (*http.Response, error)
+	Upload(ctx context.Context, buf []byte) (string, error)
+}
+
+type boltServer struct {
+	kv        filerKV
+	weed      WeedClient
+}
+
+func NewFiler(kv filerKV, weed WeedClient) *boltServer {
+	return &boltServer{
+		kv:        kv,
+		weed:      weed,
 		urlPrefix: "/fs/",
 	}
 }
 
-func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+const chunksize = 256 * 1024
+
+func (f *boltServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	names, err := f.kv.List(ctx, path)
 	if err != nil {
 		return err
@@ -54,7 +67,7 @@ func maybeSetDigest(m map[string]string, name string, value []byte) {
 	}
 }
 
-func digestsToMap(d *pb.FileInfo_Digests) map[string]string {
+func digestsToMap(d *pb.Digests) map[string]string {
 	if d == nil {
 		return nil
 	}
@@ -96,7 +109,7 @@ func parseDigests(dh string) map[string]string {
 	return result
 }
 
-func (f *filerServer) writeChunks(ctx context.Context, w io.Writer, chunks []*pb.FileChunk, limitValue int64) error {
+func (f *boltServer) writeChunks(ctx context.Context, w io.Writer, chunks []*pb.FileChunk, limitValue int64) error {
 	for _, ch := range chunks {
 		resp, err := f.weed.Get(ctx, ch.Fid)
 		if err != nil {
@@ -113,7 +126,7 @@ func (f *filerServer) writeChunks(ctx context.Context, w io.Writer, chunks []*pb
 	return nil
 }
 
-func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+func (f *boltServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" || path[len(path)-1] == '/' {
 		return f.handleList(ctx, w, r, path)
 	}
@@ -165,26 +178,53 @@ func trimOr(s, prefix, what string) (string, error) {
 	return "", fmt.Errorf("%s must start with %s, got %s", what, s, prefix)
 }
 
-func (f *filerServer) urlToPath(urlpath string) (string, error) {
+func (f *boltServer) urlToPath(urlpath string) (string, error) {
 	return trimOr(urlpath, f.urlPrefix, "filer url")
 }
 
-func (f *filerServer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
+func (f *boltServer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
 	var fi pb.FileInfo
-	if err := KVGetProto(ctx, f.kv, path, &fi); err != nil {
+	if err := common.KVGetProto(ctx, f.kv, path, &fi); err != nil {
 		return nil, err
 	}
 	return &fi, nil
 }
 
-func (f *filerServer) deleteFile(ctx context.Context, name string, fi *pb.FileInfo) error {
+func (f *boltServer) deleteFile(ctx context.Context, name string, fi *pb.FileInfo) error {
 	err := f.kv.Del(ctx, name)
 	f.deleteChunks(ctx, fi.Chunks)
 	return err
 }
 
-func (f *filerServer) handleDelete(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
-	return backend.Delete(ctx, path)
+func (f *boltServer) handleDelete(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+	fi, err := f.getFileInfo(ctx, path)
+	if err != nil {
+		if err == NotFound {
+			http.NotFound(w, r)
+			return nil
+		}
+		return err
+	}
+	return f.deleteFile(ctx, path, fi)
+}
+
+func (f *boltServer) deleteChunks(ctx context.Context, chunks []*pb.FileChunk) error {
+	var wg sync.WaitGroup
+	wg.Add(len(chunks))
+	errs := make([]error, len(chunks))
+	for i, v := range chunks {
+		go func(i int, v *pb.FileChunk) {
+			defer wg.Done()
+			errs[i] = f.weed.Delete(ctx, v.Fid)
+		}(i, v)
+	}
+	wg.Wait()
+	for _, v := range errs {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
 }
 
 type shortUploadStatus struct {
@@ -192,8 +232,7 @@ type shortUploadStatus struct {
 	Size    int64
 }
 
-
-func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+func (f *boltServer) handleUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" {
 		return f.handleMultiDownload(ctx, w, r)
 	}
@@ -206,20 +245,51 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 		}
 	}
 
-	fi := filer.FileInfo{
+	fi := pb.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 	}
+	hashes := newHashes()
+
+	contentLength := int64(-1)
+
 	if ch := r.Header.Get("X-Fs-Content-Length"); ch != "" {
 		var err error
-		fi.ContentLength, err = strconv.ParseInt(ch, 10, 64)
+		contentLength, err = strconv.ParseInt(ch, 10, 64)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := s.backend.Upload(ctx, fi, r.Body)
-	if err != nil { return err }
+	for {
+		buf := make([]byte, chunksize)
+		n, err := io.ReadFull(r.Body, buf)
+		if n == 0 {
+			if err != nil && err != io.EOF {
+				f.deleteChunks(ctx, fi.Chunks)
+				return err
+			}
+			break
+		}
+		buf = buf[0:n]
+		csum := sha1.Sum(buf)
 
+		fid, err := f.weed.Upload(ctx, buf)
+		if err != nil {
+			f.deleteChunks(ctx, fi.Chunks)
+			return err
+		}
+		hashes.Write(buf)
+		fi.Size_ += int64(n)
+		fi.Chunks = append(fi.Chunks, &pb.FileChunk{
+			Fid:     fid,
+			Sha1Sum: csum[:],
+			Size_:   int64(n),
+		})
+	}
+	if contentLength >= 0 && fi.Size_ != contentLength {
+		f.deleteChunks(ctx, fi.Chunks)
+		return nil
+	}
 	fi.Digests = hashes.toDigests()
 	recvDigests := parseDigests(r.Header.Get("Digest"))
 	if ch := r.Header.Get("Content-MD5"); ch != "" {
@@ -257,7 +327,7 @@ type multiDownloadRequest struct {
 	Entry []singleDownloadEntry
 }
 
-func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (f *boltServer) handleMultiDownload(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	decoder := json.NewDecoder(r.Body)
 	var mdreq multiDownloadRequest
 	if err := decoder.Decode(&mdreq); err != nil {
@@ -271,7 +341,7 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 	return nil
 }
 
-func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
+func (f *boltServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
 	fi, err := f.getFileInfo(ctx, name)
 	if err != nil {
 		return err
@@ -291,7 +361,7 @@ func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name
 	return f.writeChunks(ctx, wr, fi.Chunks, fi.Size_)
 }
 
-func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
+func (f *boltServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
 	prefix := "problem/" + problemID + "/"
 	names, _ := f.kv.List(ctx, prefix)
 	for _, name := range names {
@@ -320,7 +390,7 @@ func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, probl
 	return nil
 }
 
-func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
+func (f *boltServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 	cout := zip.NewWriter(w)
 	defer cout.Close()
 
@@ -346,26 +416,5 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 
 	if problemID := r.FormValue("problem"); problemID != "" {
 		f.writeProblemData(r.Context(), cout, problemID)
-	}
-}
-
-func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path, err := f.urlToPath(r.URL.Path)
-	if err == nil {
-		ctx := r.Context()
-		switch r.Method {
-		case http.MethodPut, http.MethodPost:
-			err = f.handleUpload(ctx, w, r, path)
-		case http.MethodGet, http.MethodHead:
-			err = f.handleDownload(ctx, w, r, path)
-		case http.MethodDelete:
-			err = f.handleDelete(ctx, w, r, path)
-		default:
-			http.Error(w, "", http.StatusMethodNotAllowed)
-		}
-	}
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
