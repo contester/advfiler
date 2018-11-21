@@ -6,11 +6,10 @@ import (
 	"time"
 
 	"git.sgu.ru/sgu/systemdutil"
-	"github.com/coreos/go-systemd/activation"
 	"github.com/coreos/go-systemd/daemon"
+	"git.stingr.net/stingray/advfiler/filer"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/wercker/journalhook"
 	"golang.org/x/net/trace"
 
 	log "github.com/sirupsen/logrus"
@@ -28,12 +27,12 @@ type conf3 struct {
 func main() {
 	flag.Parse()
 
-	journalhook.Enable()
+	setupJournalhook()
 	systemdutil.Logger = log.StandardLogger()
 	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) { return true, true }
 	http.Handle("/metrics", prometheus.Handler())
 
-	_, httpSockets, _ := systemdutil.ListenSystemd(activation.Files(true))
+	_, httpSockets, _ := systemdutil.ListenSystemd(activationFiles())
 
 	var config conf3
 
@@ -47,7 +46,7 @@ func main() {
 
 	httpSockets = append(httpSockets, systemdutil.MustListenTCPSlice(config.ListenHTTP)...)
 
-	var fiKV, meKV filerKV
+	var fiKV, meKV filer.KV
 
 	db, err := bolt.Open(config.BoltDB, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
@@ -58,7 +57,9 @@ func main() {
 	fiKV = NewBoltKV(db, "fs")
 	meKV = NewBoltKV(db, "problems")
 
-	f := NewFiler(fiKV, &WeedClient{master: config.WeedBackend})
+	filer1 := filer.NewBolt(fiKV, &WeedClient{master: config.WeedBackend})
+
+	f := NewFiler(filer1)
 	ms := NewMetadataServer(meKV)
 	http.Handle("/fs/", f)
 	http.HandleFunc("/fs2/", f.HandlePackage)

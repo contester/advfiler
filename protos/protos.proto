@@ -25,5 +25,5 @@ message FileInfo64 {
     Digests digests = 2;
     string module_type = 3;
     bytes inline_data = 5;
-    repeated int64 chunks = 6;
+    repeated uint64 chunks = 6;
 }

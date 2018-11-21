@@ -3,38 +3,31 @@ package main
 import (
 	"archive/zip"
 	"context"
-	"crypto/md5"
-	"crypto/sha1"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"hash"
-	"io"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
-	"github.com/golang/protobuf/proto"
-
-	pb "git.stingr.net/stingray/advfiler/protos"
+	"git.stingr.net/stingray/advfiler/common"
+	"git.stingr.net/stingray/advfiler/filer"
 )
 
 type filerServer struct {
-	backend filer.Backend
+	backend   filer.Backend
 	urlPrefix string
 }
 
-func NewFiler(backend Backend) *filerServer {
+func NewFiler(backend filer.Backend) *filerServer {
 	return &filerServer{
-		backend: backend,
+		backend:   backend,
 		urlPrefix: "/fs/",
 	}
 }
 
 func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
-	names, err := f.kv.List(ctx, path)
+	names, err := f.backend.List(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -46,25 +39,6 @@ func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *
 	}
 	return json.NewEncoder(w).Encode(&wr)*/
 	return nil
-}
-
-func maybeSetDigest(m map[string]string, name string, value []byte) {
-	if len(value) > 0 {
-		m[name] = base64.StdEncoding.EncodeToString(value)
-	}
-}
-
-func digestsToMap(d *pb.FileInfo_Digests) map[string]string {
-	if d == nil {
-		return nil
-	}
-	r := make(map[string]string)
-	maybeSetDigest(r, "MD5", d.Md5)
-	maybeSetDigest(r, "SHA", d.Sha1)
-	if len(r) == 0 {
-		return nil
-	}
-	return r
 }
 
 func addDigests(h http.Header, digests map[string]string) {
@@ -96,44 +70,12 @@ func parseDigests(dh string) map[string]string {
 	return result
 }
 
-func (f *filerServer) writeChunks(ctx context.Context, w io.Writer, chunks []*pb.FileChunk, limitValue int64) error {
-	for _, ch := range chunks {
-		resp, err := f.weed.Get(ctx, ch.Fid)
-		if err != nil {
-			return err
-		}
-		lr := io.LimitReader(resp.Body, limitValue)
-		n, err := io.Copy(w, lr)
-		limitValue -= n
-		resp.Body.Close()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" || path[len(path)-1] == '/' {
 		return f.handleList(ctx, w, r, path)
 	}
-	fi, err := f.getFileInfo(ctx, path)
-	if err != nil {
-		if err == NotFound {
-			http.NotFound(w, r)
-			return nil
-		}
-		return err
-	}
-	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(fi.Size_, 10))
-	if fi.ModuleType != "" {
-		w.Header().Add("X-Fs-Module-Type", fi.ModuleType)
-	}
-	if r.Method == http.MethodHead {
-		addDigests(w.Header(), digestsToMap(fi.Digests))
-		return nil
-	}
-	limitValue := fi.Size_
+
+	limitValue := int64(-1)
 	if limitStr := r.Header.Get("X-Fs-Limit"); limitStr != "" {
 		lv, err := strconv.ParseInt(limitStr, 10, 64)
 		if err != nil {
@@ -141,21 +83,37 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		}
 		limitValue = lv
 	}
-	if limitValue > fi.Size_ {
-		limitValue = fi.Size_
-	}
-	if limitValue < fi.Size_ {
-		w.Header().Add("X-Fs-Truncated", "true")
-	} else {
-		addDigests(w.Header(), digestsToMap(fi.Digests))
+
+	result, err := f.backend.Download(ctx, path, limitValue)
+	if err != nil {
+		if err == common.NotFound {
+			http.NotFound(w, r)
+			return nil
+		}
+		return err
 	}
 
-	w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
+	rsize := result.Size()
+	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(rsize, 10))
+	if m := result.ModuleType(); m != "" {
+		w.Header().Add("X-Fs-Module-Type", m)
+	}
+	if r.Method == http.MethodHead {
+		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
+		return nil
+	}
+	if limitValue != -1 && limitValue < rsize {
+		w.Header().Add("X-Fs-Truncated", "true")
+		w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
+	} else {
+		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
+		w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
+	}
 
 	if limitValue == 0 {
 		return nil
 	}
-	return f.writeChunks(ctx, w, fi.Chunks, limitValue)
+	return result.WriteTo(ctx, w, limitValue)
 }
 
 func trimOr(s, prefix, what string) (string, error) {
@@ -169,29 +127,9 @@ func (f *filerServer) urlToPath(urlpath string) (string, error) {
 	return trimOr(urlpath, f.urlPrefix, "filer url")
 }
 
-func (f *filerServer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
-	var fi pb.FileInfo
-	if err := KVGetProto(ctx, f.kv, path, &fi); err != nil {
-		return nil, err
-	}
-	return &fi, nil
-}
-
-func (f *filerServer) deleteFile(ctx context.Context, name string, fi *pb.FileInfo) error {
-	err := f.kv.Del(ctx, name)
-	f.deleteChunks(ctx, fi.Chunks)
-	return err
-}
-
 func (f *filerServer) handleDelete(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
-	return backend.Delete(ctx, path)
+	return f.backend.Delete(ctx, path)
 }
-
-type shortUploadStatus struct {
-	Digests map[string]string
-	Size    int64
-}
-
 
 func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" {
@@ -200,12 +138,6 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
 	}
-	if fi, err := f.getFileInfo(ctx, path); err == nil && fi != nil {
-		if err = f.deleteFile(ctx, path, fi); err != nil {
-			return err
-		}
-	}
-
 	fi := filer.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 	}
@@ -217,35 +149,17 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 		}
 	}
 
-	err := s.backend.Upload(ctx, fi, r.Body)
-	if err != nil { return err }
-
-	fi.Digests = hashes.toDigests()
-	recvDigests := parseDigests(r.Header.Get("Digest"))
+	fi.RecvDigests = parseDigests(r.Header.Get("Digest"))
 	if ch := r.Header.Get("Content-MD5"); ch != "" {
-		recvDigests["MD5"] = ch
+		fi.RecvDigests["MD5"] = ch
 	}
-	stDigests := digestsToMap(fi.Digests)
-	for k, v := range stDigests {
-		if prev, ok := recvDigests[k]; ok && v != prev {
-			f.deleteChunks(ctx, fi.Chunks)
-			return fmt.Errorf("checksum mismatch")
-		}
-	}
-	prb, err := proto.Marshal(&fi)
+
+	result, err := f.backend.Upload(ctx, fi, r.Body)
 	if err != nil {
-		f.deleteChunks(ctx, fi.Chunks)
 		return err
 	}
-	if err = f.kv.Set(ctx, path, prb); err != nil {
-		f.deleteChunks(ctx, fi.Chunks)
-		return err
-	}
-	ss := shortUploadStatus{
-		Digests: stDigests,
-		Size:    fi.Size_,
-	}
-	return json.NewEncoder(w).Encode(&ss)
+
+	return json.NewEncoder(w).Encode(&result)
 }
 
 type singleDownloadEntry struct {
@@ -272,28 +186,28 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 }
 
 func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
-	fi, err := f.getFileInfo(ctx, name)
+	result, err := f.backend.Download(ctx, name, -1)
 	if err != nil {
 		return err
 	}
 	fh := zip.FileHeader{
 		Name:               as,
-		UncompressedSize64: uint64(fi.Size_),
+		UncompressedSize64: uint64(result.Size()),
 		Method:             zip.Deflate,
 	}
-	if fi.ModuleType != "" {
-		fh.Name += "." + fi.ModuleType
+	if m := result.ModuleType(); m != "" {
+		fh.Name += "." + m
 	}
 	wr, err := w.CreateHeader(&fh)
 	if err != nil {
 		return err
 	}
-	return f.writeChunks(ctx, wr, fi.Chunks, fi.Size_)
+	return result.WriteTo(ctx, wr, -1)
 }
 
 func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
 	prefix := "problem/" + problemID + "/"
-	names, _ := f.kv.List(ctx, prefix)
+	names, _ := f.backend.List(ctx, prefix)
 	for _, name := range names {
 		pname := strings.TrimPrefix(name, prefix)
 		if pname == "checker" {
@@ -329,7 +243,7 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 	testingID := r.FormValue("testing")
 
 	if contestID != "" && submitID != "" && testingID != "" {
-		names, _ := f.kv.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
+		names, _ := f.backend.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
 		for _, name := range names {
 			splits := strings.Split(name, "/")
 			if len(splits) < 5 {

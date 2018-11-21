@@ -34,7 +34,7 @@ type FileChunk struct {
 func (m *FileChunk) Reset()      { *m = FileChunk{} }
 func (*FileChunk) ProtoMessage() {}
 func (*FileChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_3c27c9f6b9415780, []int{0}
+	return fileDescriptor_protos_39d55defc1c8a817, []int{0}
 }
 func (m *FileChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -92,7 +92,7 @@ type Digests struct {
 func (m *Digests) Reset()      { *m = Digests{} }
 func (*Digests) ProtoMessage() {}
 func (*Digests) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_3c27c9f6b9415780, []int{1}
+	return fileDescriptor_protos_39d55defc1c8a817, []int{1}
 }
 func (m *Digests) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -145,7 +145,7 @@ type FileInfo struct {
 func (m *FileInfo) Reset()      { *m = FileInfo{} }
 func (*FileInfo) ProtoMessage() {}
 func (*FileInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_3c27c9f6b9415780, []int{2}
+	return fileDescriptor_protos_39d55defc1c8a817, []int{2}
 }
 func (m *FileInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -207,13 +207,13 @@ type FileInfo64 struct {
 	Digests    *Digests `protobuf:"bytes,2,opt,name=digests" json:"digests,omitempty"`
 	ModuleType string   `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
 	InlineData []byte   `protobuf:"bytes,5,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
-	Chunks     []int64  `protobuf:"varint,6,rep,packed,name=chunks" json:"chunks,omitempty"`
+	Chunks     []uint64 `protobuf:"varint,6,rep,packed,name=chunks" json:"chunks,omitempty"`
 }
 
 func (m *FileInfo64) Reset()      { *m = FileInfo64{} }
 func (*FileInfo64) ProtoMessage() {}
 func (*FileInfo64) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_3c27c9f6b9415780, []int{3}
+	return fileDescriptor_protos_39d55defc1c8a817, []int{3}
 }
 func (m *FileInfo64) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -270,7 +270,7 @@ func (m *FileInfo64) GetInlineData() []byte {
 	return nil
 }
 
-func (m *FileInfo64) GetChunks() []int64 {
+func (m *FileInfo64) GetChunks() []uint64 {
 	if m != nil {
 		return m.Chunks
 	}
@@ -644,8 +644,7 @@ func (m *FileInfo64) MarshalTo(dAtA []byte) (int, error) {
 	if len(m.Chunks) > 0 {
 		dAtA4 := make([]byte, len(m.Chunks)*10)
 		var j3 int
-		for _, num1 := range m.Chunks {
-			num := uint64(num1)
+		for _, num := range m.Chunks {
 			for num >= 1<<7 {
 				dAtA4[j3] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
@@ -1382,7 +1381,7 @@ func (m *FileInfo64) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 6:
 			if wireType == 0 {
-				var v int64
+				var v uint64
 				for shift := uint(0); ; shift += 7 {
 					if shift >= 64 {
 						return ErrIntOverflowProtos
@@ -1392,7 +1391,7 @@ func (m *FileInfo64) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= (int64(b) & 0x7F) << shift
+					v |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -1430,10 +1429,10 @@ func (m *FileInfo64) Unmarshal(dAtA []byte) error {
 				}
 				elementCount = count
 				if elementCount != 0 && len(m.Chunks) == 0 {
-					m.Chunks = make([]int64, 0, elementCount)
+					m.Chunks = make([]uint64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
-					var v int64
+					var v uint64
 					for shift := uint(0); ; shift += 7 {
 						if shift >= 64 {
 							return ErrIntOverflowProtos
@@ -1443,7 +1442,7 @@ func (m *FileInfo64) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= (int64(b) & 0x7F) << shift
+						v |= (uint64(b) & 0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -1579,9 +1578,9 @@ var (
 	ErrIntOverflowProtos   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("protos.proto", fileDescriptor_protos_3c27c9f6b9415780) }
+func init() { proto.RegisterFile("protos.proto", fileDescriptor_protos_39d55defc1c8a817) }
 
-var fileDescriptor_protos_3c27c9f6b9415780 = []byte{
+var fileDescriptor_protos_39d55defc1c8a817 = []byte{
 	// 326 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x91, 0xb1, 0x4e, 0xf3, 0x30,
 	0x10, 0xc7, 0x73, 0x5f, 0xfa, 0xb5, 0xf4, 0x52, 0x09, 0xf0, 0x80, 0x32, 0x5d, 0xa3, 0x4c, 0x61,
@@ -1599,9 +1598,9 @@ var fileDescriptor_protos_3c27c9f6b9415780 = []byte{
 	0x47, 0x9b, 0xba, 0x5d, 0xcc, 0x34, 0xab, 0x7e, 0xaf, 0xc7, 0x94, 0x7e, 0x2d, 0x70, 0x23, 0xaf,
 	0x77, 0x58, 0xa1, 0x76, 0x0b, 0xe0, 0xe5, 0x85, 0xf0, 0x1d, 0x10, 0x2b, 0x5f, 0xe7, 0xfd, 0x3f,
 	0x77, 0xd6, 0x46, 0x4f, 0x64, 0x13, 0x91, 0xa5, 0xc3, 0x24, 0x2e, 0x62, 0xff, 0xbf, 0x59, 0x10,
-	0xda, 0xd4, 0x20, 0x2e, 0x62, 0x76, 0xb4, 0xb3, 0x5e, 0x0f, 0xdc, 0xc8, 0xad, 0x7c, 0x5e, 0xf4,
-	0x97, 0x6b, 0x72, 0x56, 0x6b, 0x72, 0xb6, 0x6b, 0x82, 0x17, 0x45, 0xf0, 0xa1, 0x08, 0x3e, 0x15,
-	0xc1, 0x52, 0x11, 0x7c, 0x29, 0x82, 0x6f, 0x45, 0xce, 0x56, 0x11, 0xbc, 0x6e, 0xc8, 0x59, 0x6e,
-	0xc8, 0x59, 0x6d, 0xc8, 0xb9, 0xb3, 0x7f, 0x7f, 0xfa, 0x13, 0x00, 0x00, 0xff, 0xff, 0xb0, 0x3f,
-	0xed, 0x85, 0x12, 0x02, 0x00, 0x00,
+	0xda, 0xd4, 0x20, 0x2e, 0x62, 0x76, 0xb4, 0xb3, 0x5e, 0x0f, 0xdc, 0xa8, 0x56, 0xf9, 0xbc, 0xe8,
+	0x2f, 0xd7, 0xe4, 0xac, 0xd6, 0xe4, 0x6c, 0xd7, 0x04, 0x2f, 0x8a, 0xe0, 0x43, 0x11, 0x7c, 0x2a,
+	0x82, 0xa5, 0x22, 0xf8, 0x52, 0x04, 0xdf, 0x8a, 0x9c, 0xad, 0x22, 0x78, 0xdd, 0x90, 0xb3, 0xdc,
+	0x90, 0xb3, 0xda, 0x90, 0x73, 0x67, 0xff, 0xfe, 0xf4, 0x27, 0x00, 0x00, 0xff, 0xff, 0xeb, 0x2d,
+	0xd3, 0xee, 0x12, 0x02, 0x00, 0x00,
 }
