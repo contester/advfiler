@@ -13,8 +13,8 @@ import (
 	"github.com/dgraph-io/badger"
 	"github.com/golang/protobuf/proto"
 
-	log "github.com/sirupsen/logrus"
 	pb "git.stingr.net/stingray/advfiler/protos"
+	log "github.com/sirupsen/logrus"
 )
 
 type UploadStatus struct {
@@ -110,10 +110,12 @@ func (s *badgerFiler) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uin
 		if len(temp.Chunks) == 1 {
 			item, err := tx.Get(iKey)
 			if err != nil {
-				if err != badger.ErrKeyNotFound { return err }
+				if err != badger.ErrKeyNotFound {
+					return err
+				}
 			} else {
 				var prev pb.ChunkList
-				item.Value(func (v []byte) error {
+				item.Value(func(v []byte) error {
 					return proto.Unmarshal(v, &prev)
 				})
 				deleteBadgerChunks(tx, prev.Chunks)
@@ -160,10 +162,15 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 	fi := pb.FileInfo64{
 		ModuleType: info.ModuleType,
 	}
+	if info.ModuleType != "" {
+		log.Infof("%v", info.ModuleType)
+	}
 	hashes := newHashes()
 	const chunksize = 64 * 1024
 
 	fk := makePermKey(info.Name)
+
+	var stDigests map[string]string
 
 	if info.ContentLength > 0 && info.ContentLength < 12*1024 {
 		fi.InlineData = make([]byte, int(info.ContentLength))
@@ -177,10 +184,12 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		if info.ContentLength >= 0 && fi.Size_ != info.ContentLength {
 			return UploadStatus{}, nil
 		}
-		fi.Digests = hashes.toDigests()
-		stDigests := common.DigestsToMap(fi.Digests)
-		if !common.CheckDigests(info.RecvDigests, stDigests) {
-			return UploadStatus{}, fmt.Errorf("checksum mismatch")
+		if fi.Size_ != 0 {
+			fi.Digests = hashes.toDigests()
+			stDigests = common.DigestsToMap(fi.Digests)
+			if !common.CheckDigests(info.RecvDigests, stDigests) {
+				return UploadStatus{}, fmt.Errorf("checksum mismatch")
+			}
 		}
 		fk := makePermKey(info.Name)
 		fkValue, err := proto.Marshal(&fi)
@@ -230,18 +239,19 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		s.deleteTemp(iKey, temp.Chunks)
 		return UploadStatus{}, nil
 	}
-	fi.Digests = hashes.toDigests()
-	stDigests := common.DigestsToMap(fi.Digests)
-	if !common.CheckDigests(info.RecvDigests, stDigests) {
-		s.deleteTemp(iKey, fi.Chunks)
-		return UploadStatus{}, fmt.Errorf("checksum mismatch")
+	if fi.Size_ != 0 {
+		fi.Digests = hashes.toDigests()
+		stDigests = common.DigestsToMap(fi.Digests)
+		if !common.CheckDigests(info.RecvDigests, stDigests) {
+			s.deleteTemp(iKey, fi.Chunks)
+			return UploadStatus{}, fmt.Errorf("checksum mismatch")
+		}
 	}
 
 	fkValue, err := proto.Marshal(&fi)
 	if err != nil {
 		return UploadStatus{}, err
 	}
-	log.Infof("final update: %v", &fi)
 	err = s.db.Update(func(tx *badger.Txn) error {
 		if err := maybeDeletePrevBadger(tx, fk); err != nil {
 			return err
