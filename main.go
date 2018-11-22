@@ -10,6 +10,7 @@ import (
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/filer"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
+	"git.stingr.net/stingray/advfiler/boltbackend"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/dgraph-io/badger"
 	"github.com/kelseyhightower/envconfig"
@@ -95,8 +96,8 @@ func main() {
 		}
 		defer db.Close()
 		db.NoSync = true
-		fiKV := NewBoltKV(db, "fs")
-		meKV = NewBoltKV(db, "problems")
+		fiKV := boltbackend.NewKV(db, []byte("fs"))
+		meKV = boltbackend.NewKV(db, []byte("problems"))
 		filerBackend = filer.NewBolt(fiKV, &WeedClient{master: config.WeedBackend})
 	}
 
