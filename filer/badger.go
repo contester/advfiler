@@ -93,22 +93,32 @@ func makePrefixedKey(prefix byte, suffix string) []byte {
 func makeTempKey(name string) []byte { return makePrefixedKey(2, name) }
 func makePermKey(name string) []byte { return makePrefixedKey(3, name) }
 
-func (s *badgerFiler) insertChunk(iKey []byte, fi pb.FileInfo64, b []byte) (uint64, error) {
+func (s *badgerFiler) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, error) {
 	next, err := s.seq.Next()
 	if err != nil {
 		return 0, err
 	}
-	fi.Chunks = append(fi.Chunks, next)
+	temp.Chunks = append(temp.Chunks, next)
 	chunkKey := makeChunkKey(next)
 
-	iValue, err := proto.Marshal(&fi)
+	iValue, err := proto.Marshal(&temp)
 	if err != nil {
 		return 0, nil
 	}
 
-	log.Infof("interim update: %q %q %v", iKey, chunkKey, &fi)
-
 	err = s.db.Update(func(tx *badger.Txn) error {
+		if len(temp.Chunks) == 1 {
+			item, err := tx.Get(iKey)
+			if err != nil {
+				if err != badger.ErrKeyNotFound { return err }
+			} else {
+				var prev pb.ChunkList
+				item.Value(func (v []byte) error {
+					return proto.Unmarshal(v, &prev)
+				})
+				deleteBadgerChunks(tx, prev.Chunks)
+			}
+		}
 		if err := tx.Set(chunkKey, b); err != nil {
 			return err
 		}
@@ -147,7 +157,6 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 }
 
 func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader) (UploadStatus, error) {
-	log.Infof("upload: %v", info)
 	fi := pb.FileInfo64{
 		ModuleType: info.ModuleType,
 	}
@@ -194,6 +203,7 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 	}
 
 	iKey := makeTempKey(info.Name)
+	var temp pb.ChunkList
 	for {
 		buf := make([]byte, chunksize)
 		n, err := io.ReadFull(body, buf)
@@ -206,18 +216,18 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		}
 		buf = buf[0:n]
 
-		fid, err := s.insertChunk(iKey, fi, buf)
+		fid, err := s.insertChunk(iKey, temp, buf)
 		if err != nil {
-			s.deleteTemp(iKey, fi.Chunks)
+			s.deleteTemp(iKey, temp.Chunks)
 			return UploadStatus{}, err
 		}
 		hashes.Write(buf)
 		fi.Size_ += int64(n)
-		fi.Chunks = append(fi.Chunks, fid)
+		temp.Chunks = append(temp.Chunks, fid)
 	}
-
+	fi.Chunks = temp.Chunks
 	if info.ContentLength >= 0 && fi.Size_ != info.ContentLength {
-		s.deleteTemp(iKey, fi.Chunks)
+		s.deleteTemp(iKey, temp.Chunks)
 		return UploadStatus{}, nil
 	}
 	fi.Digests = hashes.toDigests()

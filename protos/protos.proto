@@ -27,3 +27,7 @@ message FileInfo64 {
     bytes inline_data = 5;
     repeated uint64 chunks = 6;
 }
+
+message ChunkList {
+    repeated uint64 chunks = 1;
+}
