@@ -63,10 +63,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if config.BoltDB == "" {
-		log.Fatal("BOLT_DB needs to be specified")
-	}
-
 	httpSockets = append(httpSockets, systemdutil.MustListenTCPSlice(config.ListenHTTP)...)
 
 	var meKV filer.KV
@@ -89,7 +85,10 @@ func main() {
 		}
 		meKV = NewBadgerKV(mbdb, 1)
 	} else {
-		db, err := bolt.Open(config.BoltDB, 0600, &bolt.Options{Timeout: 1 * time.Second})
+		if config.BoltDB == "" {
+			log.Fatal("BOLT_DB needs to be specified")
+		}
+			db, err := bolt.Open(config.BoltDB, 0600, &bolt.Options{Timeout: 1 * time.Second})
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -140,6 +140,7 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	}
 	fi := filer.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
+		Name: path,
 	}
 	if ch := r.Header.Get("X-Fs-Content-Length"); ch != "" {
 		var err error
