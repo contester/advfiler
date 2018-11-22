@@ -5,7 +5,7 @@ require (
 	github.com/AndreasBriese/bbloom v0.0.0-20180913140656-343706a395b7 // indirect
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
 	github.com/coreos/go-systemd v0.0.0-20180828140353-eee3db372b31
-	github.com/dgraph-io/badger v1.5.4
+	github.com/dgraph-io/badger v1.5.5-0.20181105223651-514fda268ba2
 	github.com/dgryski/go-farm v0.0.0-20180109070241-2de33835d102 // indirect
 	github.com/gogo/protobuf v1.1.1
 	github.com/golang/protobuf v1.2.0

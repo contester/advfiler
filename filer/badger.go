@@ -58,6 +58,14 @@ type badgerFiler struct {
 	seq *badger.Sequence
 }
 
+func NewBadger(db *badger.DB) (Backend, error) {
+	var err error
+	result := badgerFiler{db: db}
+	result.seq, err = db.GetSequence([]byte{66}, 10000)
+	if err != nil { return nil, err }
+	return &result, nil
+}
+
 type FileInfo struct {
 	Name          string
 	ContentLength int64
@@ -104,13 +112,17 @@ func (s *badgerFiler) insertChunk(iKey []byte, fi pb.FileInfo64, b []byte) (uint
 	return next, err
 }
 
+func deleteBadgerChunks(tx *badger.Txn, chunks []uint64) error {
+	for _, v := range chunks {
+		if err := tx.Delete(makeChunkKey(v)); err != nil { return err }
+	}
+	return nil
+}
+
 func (s *badgerFiler) deleteTemp(key []byte, chunks []uint64) error {
 	return s.db.Update(func(tx *badger.Txn) error {
 		if err := tx.Delete(key); err != nil { return err }
-		for _, v := range chunks {
-			if err := tx.Delete(makeChunkKey(v)); err != nil { return err }
-		}
-		return nil
+		return deleteBadgerChunks(tx, chunks)
 	})
 }
 
@@ -178,3 +190,99 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 	}, nil
 }
 
+func getFileInfo64(tx *badger.Txn, key []byte, fi  *pb.FileInfo64) error {
+	item, err := tx.Get(key)
+	if err != nil { return err }
+	return item.Value(func(v []byte)error { 
+		return proto.Unmarshal(v, fi)
+	})
+}
+
+func (f *badgerFiler) Delete(ctx context.Context, path string) error {
+	fileKey := makePermKey(path)
+	return f.db.Update(func(tx *badger.Txn)error {
+		var fi pb.FileInfo64
+		if err := getFileInfo64(tx, fileKey, &fi); err != nil { return err }
+		if err := tx.Delete(fileKey); err != nil { return err }
+		return deleteBadgerChunks(tx, fi.Chunks)
+	})
+}
+
+type badgerDownloadResult struct {
+	fi pb.FileInfo64
+	f *badgerFiler
+}
+
+func (r badgerDownloadResult) Size() int64          { return r.fi.Size_ }
+func (r badgerDownloadResult) ModuleType() string   { return r.fi.ModuleType }
+func (r badgerDownloadResult) Digests() *pb.Digests { return r.fi.Digests }
+func (r badgerDownloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
+	return r.f.writeChunks(ctx, w, &r.fi, limit)
+}
+
+func (f *badgerFiler) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64, limit int64) error {
+	if fi.Size_ == 0 || limit == 0 { return nil }
+	if len(fi.InlineData) > 0 {
+		var id []byte
+		if limit != -1 && limit < int64(len(fi.InlineData)) {
+			id = fi.InlineData[:limit]
+		} else { id = fi.InlineData}
+		n, err := w.Write(id)
+		if err != nil { return err }
+		if limit != -1 {
+			limit -= int64(n)
+		}
+		if limit == 0 { return nil }
+	}
+	for _, ch := range fi.Chunks {
+		var data []byte
+		err := f.db.View(func (tx *badger.Txn) error {
+			item, err := tx.Get(makeChunkKey(ch))
+			if err != nil { return err }
+			data, err = item.ValueCopy(data)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		if limit != -1 && limit < int64(len(data)) {
+			data = data[:limit]
+		}
+		n, err := w.Write(data)
+		if limit != -1 {
+			limit -= int64(n)
+		}
+		if err != nil {
+			return err
+		}
+		if limit == 0 { return nil}
+	}
+	return nil
+}
+
+func (f *badgerFiler) Download(ctx context.Context, path string, limit int64) (DownloadResult, error) {
+	fileKey := makePermKey(path)
+	result := badgerDownloadResult{
+		f: f,
+	}
+	if err := f.db.View(func(tx *badger.Txn) error {
+		return getFileInfo64(tx, fileKey, &result.fi)
+	}); err != nil { return nil, err}
+	return result, nil
+}
+
+func (f *badgerFiler) List(ctx context.Context, path string) ([]string, error) {
+	pfx := makePermKey(path)
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
+	var res []string
+	if err := f.db.View(func(tx *badger.Txn) error {
+		iter := tx.NewIterator(opts)
+		defer iter.Close()
+		for iter.Seek(pfx); iter.ValidForPrefix(pfx); iter.Next() {
+			res = append(res, string(iter.Item().Key()[1:]))
+		}
+		return nil
+	}); err != nil { return nil, err }
+	return res, nil
+}

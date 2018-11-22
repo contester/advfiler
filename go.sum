@@ -8,6 +8,8 @@ github.com/coreos/go-systemd v0.0.0-20180828140353-eee3db372b31 h1:wRzCUSYhBIk1K
 github.com/coreos/go-systemd v0.0.0-20180828140353-eee3db372b31/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/dgraph-io/badger v1.5.4 h1:gVTrpUTbbr/T24uvoCaqY2KSHfNLVGm0w+hbee2HMeg=
 github.com/dgraph-io/badger v1.5.4/go.mod h1:VZxzAIRPHRVNRKRo6AXrX9BJegn6il06VMTZVJYCIjQ=
+github.com/dgraph-io/badger v1.5.5-0.20181105223651-514fda268ba2 h1:VQo2qkMwr2IzTCPT4BFpEuWTpAJrxWxRefLSTDDArE4=
+github.com/dgraph-io/badger v1.5.5-0.20181105223651-514fda268ba2/go.mod h1:VZxzAIRPHRVNRKRo6AXrX9BJegn6il06VMTZVJYCIjQ=
 github.com/dgryski/go-farm v0.0.0-20180109070241-2de33835d102 h1:afESQBXJEnj3fu+34X//E8Wg3nEbMJxJkwSc0tPePK0=
 github.com/dgryski/go-farm v0.0.0-20180109070241-2de33835d102/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
 github.com/gogo/protobuf v1.1.1 h1:72R+M5VuhED/KujmZVcIquuo8mBgX4oVda//DQb3PXo=
