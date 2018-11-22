@@ -80,7 +80,7 @@ func makeChunkKey(id uint64) []byte {
 	result := make([]byte, binary.MaxVarintLen64+1)
 	result[0] = 1
 	n := binary.PutUvarint(result[1:], id)
-	return result[:n-1]
+	return result[:n+1]
 }
 
 func makePrefixedKey(prefix byte, suffix string) []byte {
@@ -105,6 +105,8 @@ func (s *badgerFiler) insertChunk(iKey []byte, fi pb.FileInfo64, b []byte) (uint
 	if err != nil {
 		return 0, nil
 	}
+
+	log.Infof("interim update: %q %q %v", iKey, chunkKey, &fi)
 
 	err = s.db.Update(func(tx *badger.Txn) error {
 		if err := tx.Set(chunkKey, b); err != nil {
@@ -152,7 +154,7 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 	hashes := newHashes()
 	const chunksize = 64 * 1024
 
-	iKey := makeTempKey(info.Name)
+	fk := makePermKey(info.Name)
 
 	if info.ContentLength > 0 && info.ContentLength < 12*1024 {
 		fi.InlineData = make([]byte, int(info.ContentLength))
@@ -191,6 +193,7 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		}, nil
 	}
 
+	iKey := makeTempKey(info.Name)
 	for {
 		buf := make([]byte, chunksize)
 		n, err := io.ReadFull(body, buf)
@@ -224,11 +227,11 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		return UploadStatus{}, fmt.Errorf("checksum mismatch")
 	}
 
-	fk := makePermKey(info.Name)
 	fkValue, err := proto.Marshal(&fi)
 	if err != nil {
 		return UploadStatus{}, err
 	}
+	log.Infof("final update: %v", &fi)
 	err = s.db.Update(func(tx *badger.Txn) error {
 		if err := maybeDeletePrevBadger(tx, fk); err != nil {
 			return err
