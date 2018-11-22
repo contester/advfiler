@@ -41,7 +41,7 @@ type problemKey struct {
 }
 
 func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "PUT" && r.Method != "POST" {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
 		http.Error(w, "", http.StatusMethodNotAllowed)
 		return
 	}
@@ -64,7 +64,7 @@ func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Reques
 }
 
 func (f *metadataServer) handleDelManifest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		http.Error(w, "", http.StatusMethodNotAllowed)
 		return
 	}
@@ -147,7 +147,7 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
-		if err == NotFound {
+		if err == common.NotFound {
 			http.NotFound(w, r)
 			return
 		}

@@ -3,7 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
+
+	"git.stingr.net/stingray/advfiler/common"
 
 	bolt "go.etcd.io/bbolt"
 )
@@ -25,13 +26,11 @@ func NewBoltKV(db *bolt.DB, bucket string) *boltKV {
 	return s
 }
 
-var NotFound = errors.New("not found")
-
 func (s *boltKV) Get(_ context.Context, key string) (res []byte, err error) {
 	err = s.db.View(func(tx *bolt.Tx) error {
 		r := tx.Bucket(s.bucket).Get([]byte(key))
 		if r == nil {
-			return NotFound
+			return common.NotFound
 		}
 		res = append(res, r...)
 		return nil

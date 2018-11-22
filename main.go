@@ -9,6 +9,7 @@ import (
 
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/filer"
+	"git.stingr.net/stingray/advfiler/badgerbackend"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/dgraph-io/badger"
 	"github.com/kelseyhightower/envconfig"
@@ -83,7 +84,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("can't create badger filer: %v", err)
 		}
-		meKV = NewBadgerKV(mbdb, 1)
+		meKV = badgerbackend.NewKV(mbdb, nil)
 	} else {
 		if config.BoltDB == "" {
 			log.Fatal("BOLT_DB needs to be specified")
