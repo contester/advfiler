@@ -1,22 +1,23 @@
-package main
+package boltbackend
 
 import (
 	"bytes"
 	"context"
-	"errors"
+
+	"git.stingr.net/stingray/advfiler/common"
 
 	bolt "go.etcd.io/bbolt"
 )
 
-type boltKV struct {
+type KV struct {
 	db     *bolt.DB
 	bucket []byte
 }
 
-func NewBoltKV(db *bolt.DB, bucket string) *boltKV {
-	s := &boltKV{
+func NewKV(db *bolt.DB, bucket []byte) *KV {
+	s := &KV{
 		db:     db,
-		bucket: []byte(bucket),
+		bucket: bucket,
 	}
 	s.db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists(s.bucket)
@@ -25,13 +26,11 @@ func NewBoltKV(db *bolt.DB, bucket string) *boltKV {
 	return s
 }
 
-var NotFound = errors.New("not found")
-
-func (s *boltKV) Get(_ context.Context, key string) (res []byte, err error) {
+func (s *KV) Get(_ context.Context, key string) (res []byte, err error) {
 	err = s.db.View(func(tx *bolt.Tx) error {
 		r := tx.Bucket(s.bucket).Get([]byte(key))
 		if r == nil {
-			return NotFound
+			return common.NotFound
 		}
 		res = append(res, r...)
 		return nil
@@ -39,10 +38,10 @@ func (s *boltKV) Get(_ context.Context, key string) (res []byte, err error) {
 	return res, err
 }
 
-func (s *boltKV) List(_ context.Context, prefix string) (res []string, err error) {
+func (s *KV) List(_ context.Context, prefix string) (res []string, err error) {
+	pr := []byte(prefix)
 	err = s.db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket(s.bucket).Cursor()
-		pr := []byte(prefix)
 		for k, _ := c.Seek(pr); k != nil && bytes.HasPrefix(k, pr); k, _ = c.Next() {
 			res = append(res, string(k))
 		}
@@ -51,13 +50,13 @@ func (s *boltKV) List(_ context.Context, prefix string) (res []string, err error
 	return res, err
 }
 
-func (s *boltKV) Del(_ context.Context, key string) error {
+func (s *KV) Del(_ context.Context, key string) error {
 	return s.db.Batch(func(tx *bolt.Tx) error {
 		return tx.Bucket(s.bucket).Delete([]byte(key))
 	})
 }
 
-func (s *boltKV) Set(_ context.Context, key string, value []byte) error {
+func (s *KV) Set(_ context.Context, key string, value []byte) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket(s.bucket).Put([]byte(key), value)
 	})
