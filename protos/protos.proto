@@ -20,12 +20,18 @@ message FileInfo {
     repeated FileChunk chunks = 4;
 }
 
+enum CompressionType {
+    CT_NONE = 0;
+    CT_SNAPPY = 1;
+}
+
 message FileInfo64 {
     int64 size = 1;
     Digests digests = 2;
     string module_type = 3;
     bytes inline_data = 5;
     repeated uint64 chunks = 6;
+    CompressionType compression = 7;
 }
 
 message ChunkList {
