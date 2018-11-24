@@ -7,15 +7,14 @@ import (
 	"sort"
 	"strconv"
 
-	"git.stingr.net/stingray/advfiler/filer"
 	"git.stingr.net/stingray/advfiler/common"
 )
 
 type metadataServer struct {
-	kv filer.KV
+	kv common.DB
 }
 
-func NewMetadataServer(kv filer.KV) *metadataServer {
+func NewMetadataServer(kv common.DB) *metadataServer {
 	return &metadataServer{
 		kv: kv,
 	}

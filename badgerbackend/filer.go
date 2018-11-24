@@ -1,12 +1,9 @@
-package filer
+package badgerbackend
 
 import (
 	"context"
-	"crypto/md5"
-	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
-	"hash"
 	"io"
 
 	"git.stingr.net/stingray/advfiler/common"
@@ -17,63 +14,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type UploadStatus struct {
-	Digests map[string]string
-	Size    int64
-}
-
-type Backend interface {
-	Upload(ctx context.Context, info FileInfo, body io.Reader) (UploadStatus, error)
-	List(ctx context.Context, path string) ([]string, error)
-	Download(ctx context.Context, path string, limit int64) (DownloadResult, error)
-	Delete(ctx context.Context, path string) error
-}
-
-type allHashes struct {
-	sha1, md5 hash.Hash
-}
-
-func (s *allHashes) Write(p []byte) (n int, err error) {
-	if n, err = s.md5.Write(p); err != nil {
-		return n, err
-	}
-	return s.sha1.Write(p)
-}
-
-func (s *allHashes) toDigests() *pb.Digests {
-	return &pb.Digests{
-		Md5:  s.md5.Sum(nil),
-		Sha1: s.sha1.Sum(nil),
-	}
-}
-
-func newHashes() *allHashes {
-	return &allHashes{
-		sha1: sha1.New(),
-		md5:  md5.New(),
-	}
-}
-
-type badgerFiler struct {
+type Filer struct {
 	db  *badger.DB
 	seq *badger.Sequence
 }
 
-func NewBadger(db *badger.DB) (Backend, error) {
+func NewFiler(db *badger.DB) (*Filer, error) {
 	var err error
-	result := badgerFiler{db: db}
+	result := Filer{db: db}
 	result.seq, err = db.GetSequence([]byte{66}, 10000)
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
-}
-
-type FileInfo struct {
-	Name          string
-	ContentLength int64
-	ModuleType    string
-	RecvDigests   map[string]string
 }
 
 func makeChunkKey(id uint64) []byte {
@@ -93,7 +46,7 @@ func makePrefixedKey(prefix byte, suffix string) []byte {
 func makeTempKey(name string) []byte { return makePrefixedKey(2, name) }
 func makePermKey(name string) []byte { return makePrefixedKey(3, name) }
 
-func (s *badgerFiler) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, error) {
+func (s *Filer) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, error) {
 	next, err := s.seq.Next()
 	if err != nil {
 		return 0, err
@@ -138,7 +91,7 @@ func deleteBadgerChunks(tx *badger.Txn, chunks []uint64) error {
 	return nil
 }
 
-func (s *badgerFiler) deleteTemp(key []byte, chunks []uint64) error {
+func (s *Filer) deleteTemp(key []byte, chunks []uint64) error {
 	return s.db.Update(func(tx *badger.Txn) error {
 		if err := tx.Delete(key); err != nil {
 			return err
@@ -158,14 +111,14 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 	return deleteBadgerChunks(tx, prev.Chunks)
 }
 
-func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader) (UploadStatus, error) {
+func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
 	fi := pb.FileInfo64{
 		ModuleType: info.ModuleType,
 	}
 	if info.ModuleType != "" {
 		log.Infof("%v", info.ModuleType)
 	}
-	hashes := newHashes()
+	hashes := common.NewHashes()
 	const chunksize = 64 * 1024
 
 	fk := makePermKey(info.Name)
@@ -176,25 +129,25 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		fi.InlineData = make([]byte, int(info.ContentLength))
 		n, err := io.ReadFull(body, fi.InlineData)
 		if err != nil {
-			return UploadStatus{}, err
+			return common.UploadStatus{}, err
 		}
 		fi.Size_ += int64(n)
 		hashes.Write(fi.InlineData)
 
 		if info.ContentLength >= 0 && fi.Size_ != info.ContentLength {
-			return UploadStatus{}, nil
+			return common.UploadStatus{}, nil
 		}
 		if fi.Size_ != 0 {
-			fi.Digests = hashes.toDigests()
+			fi.Digests = hashes.Digests()
 			stDigests = common.DigestsToMap(fi.Digests)
 			if !common.CheckDigests(info.RecvDigests, stDigests) {
-				return UploadStatus{}, fmt.Errorf("checksum mismatch")
+				return common.UploadStatus{}, fmt.Errorf("checksum mismatch")
 			}
 		}
 		fk := makePermKey(info.Name)
 		fkValue, err := proto.Marshal(&fi)
 		if err != nil {
-			return UploadStatus{}, err
+			return common.UploadStatus{}, err
 		}
 
 		if err = s.db.Update(func(tx *badger.Txn) error {
@@ -203,9 +156,9 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 			}
 			return tx.Set(fk, fkValue)
 		}); err != nil {
-			return UploadStatus{}, err
+			return common.UploadStatus{}, err
 		}
-		return UploadStatus{
+		return common.UploadStatus{
 			Digests: stDigests,
 			Size:    fi.Size_,
 		}, nil
@@ -219,7 +172,7 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		if n == 0 {
 			if err != nil && err != io.EOF {
 				s.deleteTemp(iKey, fi.Chunks)
-				return UploadStatus{}, err
+				return common.UploadStatus{}, err
 			}
 			break
 		}
@@ -228,7 +181,7 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 		fid, err := s.insertChunk(iKey, temp, buf)
 		if err != nil {
 			s.deleteTemp(iKey, temp.Chunks)
-			return UploadStatus{}, err
+			return common.UploadStatus{}, err
 		}
 		hashes.Write(buf)
 		fi.Size_ += int64(n)
@@ -237,20 +190,20 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 	fi.Chunks = temp.Chunks
 	if info.ContentLength >= 0 && fi.Size_ != info.ContentLength {
 		s.deleteTemp(iKey, temp.Chunks)
-		return UploadStatus{}, nil
+		return common.UploadStatus{}, nil
 	}
 	if fi.Size_ != 0 {
-		fi.Digests = hashes.toDigests()
+		fi.Digests = hashes.Digests()
 		stDigests = common.DigestsToMap(fi.Digests)
 		if !common.CheckDigests(info.RecvDigests, stDigests) {
 			s.deleteTemp(iKey, fi.Chunks)
-			return UploadStatus{}, fmt.Errorf("checksum mismatch")
+			return common.UploadStatus{}, fmt.Errorf("checksum mismatch")
 		}
 	}
 
 	fkValue, err := proto.Marshal(&fi)
 	if err != nil {
-		return UploadStatus{}, err
+		return common.UploadStatus{}, err
 	}
 	err = s.db.Update(func(tx *badger.Txn) error {
 		if err := maybeDeletePrevBadger(tx, fk); err != nil {
@@ -263,10 +216,10 @@ func (s *badgerFiler) Upload(ctx context.Context, info FileInfo, body io.Reader)
 	})
 	if err != nil {
 		s.deleteTemp(iKey, fi.Chunks)
-		return UploadStatus{}, err
+		return common.UploadStatus{}, err
 	}
 
-	return UploadStatus{
+	return common.UploadStatus{
 		Digests: stDigests,
 		Size:    fi.Size_,
 	}, nil
@@ -282,7 +235,7 @@ func getFileInfo64(tx *badger.Txn, key []byte, fi *pb.FileInfo64) error {
 	})
 }
 
-func (f *badgerFiler) Delete(ctx context.Context, path string) error {
+func (f *Filer) Delete(ctx context.Context, path string) error {
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
 		var fi pb.FileInfo64
@@ -296,19 +249,19 @@ func (f *badgerFiler) Delete(ctx context.Context, path string) error {
 	})
 }
 
-type badgerDownloadResult struct {
+type downloadResult struct {
 	fi pb.FileInfo64
-	f  *badgerFiler
+	f  *Filer
 }
 
-func (r badgerDownloadResult) Size() int64          { return r.fi.Size_ }
-func (r badgerDownloadResult) ModuleType() string   { return r.fi.ModuleType }
-func (r badgerDownloadResult) Digests() *pb.Digests { return r.fi.Digests }
-func (r badgerDownloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
+func (r downloadResult) Size() int64          { return r.fi.Size_ }
+func (r downloadResult) ModuleType() string   { return r.fi.ModuleType }
+func (r downloadResult) Digests() *pb.Digests { return r.fi.Digests }
+func (r downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
 	return r.f.writeChunks(ctx, w, &r.fi, limit)
 }
 
-func (f *badgerFiler) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64, limit int64) error {
+func (f *Filer) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64, limit int64) error {
 	if fi.Size_ == 0 || limit == 0 {
 		return nil
 	}
@@ -360,9 +313,9 @@ func (f *badgerFiler) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileI
 	return nil
 }
 
-func (f *badgerFiler) Download(ctx context.Context, path string, limit int64) (DownloadResult, error) {
+func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResult, error) {
 	fileKey := makePermKey(path)
-	result := badgerDownloadResult{
+	result := downloadResult{
 		f: f,
 	}
 	if err := f.db.View(func(tx *badger.Txn) error {
@@ -373,7 +326,7 @@ func (f *badgerFiler) Download(ctx context.Context, path string, limit int64) (D
 	return result, nil
 }
 
-func (f *badgerFiler) List(ctx context.Context, path string) ([]string, error) {
+func (f *Filer) List(ctx context.Context, path string) ([]string, error) {
 	pfx := makePermKey(path)
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = false

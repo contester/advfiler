@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"git.sgu.ru/sgu/systemdutil"
-	"git.stingr.net/stingray/advfiler/filer"
+	"git.stingr.net/stingray/advfiler/common"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
 	"git.stingr.net/stingray/advfiler/boltbackend"
 	"github.com/coreos/go-systemd/daemon"
@@ -67,8 +67,8 @@ func main() {
 
 	httpSockets = append(httpSockets, systemdutil.MustListenTCPSlice(config.ListenHTTP)...)
 
-	var meKV filer.KV
-	var filerBackend filer.Backend
+	var meKV common.DB
+	var filerBackend common.Backend
 
 	if config.ManifestBadgerDB != "" && config.FilerBadgerDB != "" {
 		mbdb, err := badgerOpen(config.ManifestBadgerDB)
@@ -81,7 +81,7 @@ func main() {
 			log.Fatalf("can't open filer db: %v", err)
 		}
 		defer fbdb.Close()
-		filerBackend, err = filer.NewBadger(fbdb)
+		filerBackend, err = badgerbackend.NewFiler(fbdb)
 		if err != nil {
 			log.Fatalf("can't create badger filer: %v", err)
 		}
@@ -98,7 +98,7 @@ func main() {
 		db.NoSync = true
 		fiKV := boltbackend.NewKV(db, []byte("fs"))
 		meKV = boltbackend.NewKV(db, []byte("problems"))
-		filerBackend = filer.NewBolt(fiKV, &WeedClient{master: config.WeedBackend})
+		filerBackend = boltbackend.NewFiler(fiKV, &WeedClient{master: config.WeedBackend})
 	}
 
 	f := NewFiler(filerBackend)

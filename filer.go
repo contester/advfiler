@@ -11,15 +11,14 @@ import (
 	"strings"
 
 	"git.stingr.net/stingray/advfiler/common"
-	"git.stingr.net/stingray/advfiler/filer"
 )
 
 type filerServer struct {
-	backend   filer.Backend
+	backend   common.Backend
 	urlPrefix string
 }
 
-func NewFiler(backend filer.Backend) *filerServer {
+func NewFiler(backend common.Backend) *filerServer {
 	return &filerServer{
 		backend:   backend,
 		urlPrefix: "/fs/",
@@ -84,7 +83,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		limitValue = lv
 	}
 
-	result, err := f.backend.Download(ctx, path, limitValue)
+	result, err := f.backend.Download(ctx, path)
 	if err != nil {
 		if err == common.NotFound {
 			http.NotFound(w, r)
@@ -138,9 +137,9 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
 	}
-	fi := filer.FileInfo{
+	fi := common.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
-		Name: path,
+		Name:       path,
 	}
 	if ch := r.Header.Get("X-Fs-Content-Length"); ch != "" {
 		var err error
@@ -187,7 +186,7 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 }
 
 func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
-	result, err := f.backend.Download(ctx, name, -1)
+	result, err := f.backend.Download(ctx, name)
 	if err != nil {
 		return err
 	}

@@ -2,9 +2,13 @@ package common
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"hash"
+	"io"
 
 	"github.com/golang/protobuf/proto"
 
@@ -59,4 +63,62 @@ func CheckDigests(recv, computed map[string]string) bool {
 		}
 	}
 	return true
+}
+
+type DownloadResult interface {
+	Size() int64
+	ModuleType() string
+	Digests() *pb.Digests
+	WriteTo(ctx context.Context, w io.Writer, limit int64) error
+}
+
+type UploadStatus struct {
+	Digests map[string]string
+	Size    int64
+}
+
+type Hashes struct {
+	Sha1, Md5 hash.Hash
+}
+
+func (s *Hashes) Write(p []byte) (n int, err error) {
+	if n, err = s.Md5.Write(p); err != nil {
+		return n, err
+	}
+	return s.Sha1.Write(p)
+}
+
+func (s *Hashes) Digests() *pb.Digests {
+	return &pb.Digests{
+		Md5:  s.Md5.Sum(nil),
+		Sha1: s.Sha1.Sum(nil),
+	}
+}
+
+func NewHashes() *Hashes {
+	return &Hashes{
+		Sha1: sha1.New(),
+		Md5:  md5.New(),
+	}
+}
+
+type Backend interface {
+	Upload(ctx context.Context, info FileInfo, body io.Reader) (UploadStatus, error)
+	List(ctx context.Context, path string) ([]string, error)
+	Download(ctx context.Context, path string) (DownloadResult, error)
+	Delete(ctx context.Context, path string) error
+}
+
+type FileInfo struct {
+	Name          string
+	ContentLength int64
+	ModuleType    string
+	RecvDigests   map[string]string
+}
+
+type DB interface {
+	Get(ctx context.Context, key string) ([]byte, error)
+	List(ctx context.Context, prefix string) ([]string, error)
+	Del(ctx context.Context, key string) error
+	Set(ctx context.Context, key string, value []byte) error
 }

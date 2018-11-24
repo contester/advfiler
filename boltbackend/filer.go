@@ -32,7 +32,7 @@ type Filer struct {
 	weed WeedClient
 }
 
-func NewBolt(kv DB, weed WeedClient) *Filer {
+func NewFiler(kv DB, weed WeedClient) *Filer {
 	return &Filer{
 		kv:   kv,
 		weed: weed,
@@ -69,43 +69,31 @@ func (f *Filer) writeChunks(ctx context.Context, w io.Writer, chunks []*pb.FileC
 	return nil
 }
 
-type DownloadResult interface {
-	Size() int64
-	ModuleType() string
-	Digests() *pb.Digests
-	WriteTo(ctx context.Context, w io.Writer, limit int64) error
+type downloadResult struct {
+	fi *pb.FileInfo
+	f  *Filer
 }
 
-type boltDownloadResult struct {
-	size       int64
-	moduleType string
-	digests    *pb.Digests
-	chunks     []*pb.FileChunk
-	f          *boltServer
+func (r downloadResult) Size() int64          { return r.fi.GetSize_() }
+func (r downloadResult) ModuleType() string   { return r.fi.GetModuleType() }
+func (r downloadResult) Digests() *pb.Digests { return r.fi.GetDigests() }
+func (r downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
+	return r.f.writeChunks(ctx, w, r.fi.GetChunks(), limit)
 }
 
-func (r boltDownloadResult) Size() int64          { return r.size }
-func (r boltDownloadResult) ModuleType() string   { return r.moduleType }
-func (r boltDownloadResult) Digests() *pb.Digests { return r.digests }
-func (r boltDownloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
-	return r.f.writeChunks(ctx, w, r.chunks, limit)
-}
-
-func (f *boltServer) Download(ctx context.Context, path string, limit int64) (DownloadResult, error) {
+func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResult, error) {
 	fi, err := f.getFileInfo(ctx, path)
 	if err != nil {
 		return nil, err
 	}
 
-	return boltDownloadResult{
-		size:       fi.Size_,
-		moduleType: fi.ModuleType,
-		digests:    fi.Digests,
-		chunks:     fi.Chunks,
+	return downloadResult{
+		fi: fi,
+		f:  f,
 	}, nil
 }
 
-func (f *boltServer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
+func (f *Filer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
 	var fi pb.FileInfo
 	if err := common.KVGetProto(ctx, f.kv, path, &fi); err != nil {
 		return nil, err
@@ -113,13 +101,13 @@ func (f *boltServer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo
 	return &fi, nil
 }
 
-func (f *boltServer) deleteFile(ctx context.Context, name string, fi *pb.FileInfo) error {
+func (f *Filer) deleteFile(ctx context.Context, name string, fi *pb.FileInfo) error {
 	err := f.kv.Del(ctx, name)
 	f.deleteChunks(ctx, fi.Chunks)
 	return err
 }
 
-func (f *boltServer) Delete(ctx context.Context, path string) error {
+func (f *Filer) Delete(ctx context.Context, path string) error {
 	fi, err := f.getFileInfo(ctx, path)
 	if err != nil {
 		return err
@@ -127,7 +115,7 @@ func (f *boltServer) Delete(ctx context.Context, path string) error {
 	return f.deleteFile(ctx, path, fi)
 }
 
-func (f *boltServer) deleteChunks(ctx context.Context, chunks []*pb.FileChunk) error {
+func (f *Filer) deleteChunks(ctx context.Context, chunks []*pb.FileChunk) error {
 	var wg sync.WaitGroup
 	wg.Add(len(chunks))
 	errs := make([]error, len(chunks))
@@ -146,22 +134,17 @@ func (f *boltServer) deleteChunks(ctx context.Context, chunks []*pb.FileChunk) e
 	return nil
 }
 
-type shortUploadStatus struct {
-	Digests map[string]string
-	Size    int64
-}
-
-func (f *boltServer) Upload(ctx context.Context, info FileInfo, body io.Reader) (UploadStatus, error) {
+func (f *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
 	if fi, err := f.getFileInfo(ctx, info.Name); err == nil && fi != nil {
 		if err = f.deleteFile(ctx, info.Name, fi); err != nil {
-			return UploadStatus{}, err
+			return common.UploadStatus{}, err
 		}
 	}
 
 	fi := pb.FileInfo{
 		ModuleType: info.ModuleType,
 	}
-	hashes := newHashes()
+	hashes := common.NewHashes()
 
 	contentLength := info.ContentLength
 
@@ -171,7 +154,7 @@ func (f *boltServer) Upload(ctx context.Context, info FileInfo, body io.Reader) 
 		if n == 0 {
 			if err != nil && err != io.EOF {
 				f.deleteChunks(ctx, fi.Chunks)
-				return UploadStatus{}, err
+				return common.UploadStatus{}, err
 			}
 			break
 		}
@@ -181,7 +164,7 @@ func (f *boltServer) Upload(ctx context.Context, info FileInfo, body io.Reader) 
 		fid, err := f.weed.Upload(ctx, buf)
 		if err != nil {
 			f.deleteChunks(ctx, fi.Chunks)
-			return UploadStatus{}, err
+			return common.UploadStatus{}, err
 		}
 		hashes.Write(buf)
 		fi.Size_ += int64(n)
@@ -193,24 +176,24 @@ func (f *boltServer) Upload(ctx context.Context, info FileInfo, body io.Reader) 
 	}
 	if contentLength >= 0 && fi.Size_ != contentLength {
 		f.deleteChunks(ctx, fi.Chunks)
-		return UploadStatus{}, nil
+		return common.UploadStatus{}, nil
 	}
-	fi.Digests = hashes.toDigests()
+	fi.Digests = hashes.Digests()
 	stDigests := common.DigestsToMap(fi.Digests)
 	if !common.CheckDigests(info.RecvDigests, stDigests) {
 		f.deleteChunks(ctx, fi.Chunks)
-		return UploadStatus{}, fmt.Errorf("checksum mismatch")
+		return common.UploadStatus{}, fmt.Errorf("checksum mismatch")
 	}
 	prb, err := proto.Marshal(&fi)
 	if err != nil {
 		f.deleteChunks(ctx, fi.Chunks)
-		return UploadStatus{}, err
+		return common.UploadStatus{}, err
 	}
 	if err = f.kv.Set(ctx, info.Name, prb); err != nil {
 		f.deleteChunks(ctx, fi.Chunks)
-		return UploadStatus{}, err
+		return common.UploadStatus{}, err
 	}
-	return UploadStatus{
+	return common.UploadStatus{
 		Digests: stDigests,
 		Size:    fi.Size_,
 	}, nil
