@@ -12,6 +12,7 @@ import (
 )
 
 func exportAll(base, path string) error {
+	fmt.Printf("exporting all from %q", base+path)
 	resp, err := http.Get(base + path)
 	if err != nil {
 		return err
