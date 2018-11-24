@@ -114,6 +114,7 @@ type FileInfo struct {
 	ContentLength int64
 	ModuleType    string
 	RecvDigests   map[string]string
+	Compression   pb.CompressionType
 }
 
 type DB interface {

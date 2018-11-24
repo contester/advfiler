@@ -3,15 +3,14 @@ package badgerbackend
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 
 	"git.stingr.net/stingray/advfiler/common"
 	"github.com/dgraph-io/badger"
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/snappy"
 
 	pb "git.stingr.net/stingray/advfiler/protos"
-	log "github.com/sirupsen/logrus"
 )
 
 type Filer struct {
@@ -59,7 +58,7 @@ func (s *Filer) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, e
 		return 0, nil
 	}
 
-	err = s.db.Update(func(tx *badger.Txn) error {
+	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
 		if len(temp.Chunks) == 1 {
 			item, err := tx.Get(iKey)
 			if err != nil {
@@ -111,118 +110,89 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 	return deleteBadgerChunks(tx, prev.Chunks)
 }
 
+type chunkingWriter struct {
+	f       *Filer
+//	permKey []byte
+	tempKey []byte
+//	fi      pb.FileInfo64
+//	hashes  *common.Hashes
+	inlineData []byte
+	chunks  pb.ChunkList
+}
+
+func (s *chunkingWriter) Write(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+	if s.inlineData == nil {
+		s.inlineData = append(s.inlineData, b...)
+		//s.hashes.Write(b)
+		return len(b), nil
+	}
+	fid, err := s.f.insertChunk(s.tempKey, s.chunks, b)
+	if err != nil {
+		if len(s.chunks.Chunks) > 1 {
+			s.f.deleteTemp(s.tempKey, s.chunks.Chunks)
+		}
+		return 0, err
+	}
+	s.chunks.Chunks = append(s.chunks.Chunks, fid)
+	return len(b), nil
+}
+
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
+	cw := chunkingWriter{
+		f: s,
+		tempKey: makeTempKey(info.Name),
+	}
+
+	bw := snappy.NewBufferedWriter(&cw)
+	hashes := common.NewHashes()
+	mw := io.MultiWriter(bw, hashes)
+	buf := make([]byte, 48 * 1024)
+	n, err := io.CopyBuffer(mw, body, buf)
+	if err != nil {
+		return common.UploadStatus{}, err
+	}
+	bw.Close()
+
 	fi := pb.FileInfo64{
 		ModuleType: info.ModuleType,
-	}
-	if info.ModuleType != "" {
-		log.Infof("%v", info.ModuleType)
-	}
-	hashes := common.NewHashes()
-	const chunksize = 64 * 1024
-
-	fk := makePermKey(info.Name)
-
-	var stDigests map[string]string
-
-	if info.ContentLength > 0 && info.ContentLength < 12*1024 {
-		fi.InlineData = make([]byte, int(info.ContentLength))
-		n, err := io.ReadFull(body, fi.InlineData)
-		if err != nil {
-			return common.UploadStatus{}, err
-		}
-		fi.Size_ += int64(n)
-		hashes.Write(fi.InlineData)
-
-		if info.ContentLength >= 0 && fi.Size_ != info.ContentLength {
-			return common.UploadStatus{}, nil
-		}
-		if fi.Size_ != 0 {
-			fi.Digests = hashes.Digests()
-			stDigests = common.DigestsToMap(fi.Digests)
-			if !common.CheckDigests(info.RecvDigests, stDigests) {
-				return common.UploadStatus{}, fmt.Errorf("checksum mismatch")
-			}
-		}
-		fk := makePermKey(info.Name)
-		fkValue, err := proto.Marshal(&fi)
-		if err != nil {
-			return common.UploadStatus{}, err
-		}
-
-		if err = s.db.Update(func(tx *badger.Txn) error {
-			if err := maybeDeletePrevBadger(tx, fk); err != nil {
-				return err
-			}
-			return tx.Set(fk, fkValue)
-		}); err != nil {
-			return common.UploadStatus{}, err
-		}
-		return common.UploadStatus{
-			Digests: stDigests,
-			Size:    fi.Size_,
-		}, nil
+		Size_: n,
+		InlineData: cw.inlineData,
+		Chunks: cw.chunks.Chunks,
 	}
 
-	iKey := makeTempKey(info.Name)
-	var temp pb.ChunkList
-	for {
-		buf := make([]byte, chunksize)
-		n, err := io.ReadFull(body, buf)
-		if n == 0 {
-			if err != nil && err != io.EOF {
-				s.deleteTemp(iKey, fi.Chunks)
-				return common.UploadStatus{}, err
-			}
-			break
-		}
-		buf = buf[0:n]
-
-		fid, err := s.insertChunk(iKey, temp, buf)
-		if err != nil {
-			s.deleteTemp(iKey, temp.Chunks)
-			return common.UploadStatus{}, err
-		}
-		hashes.Write(buf)
-		fi.Size_ += int64(n)
-		temp.Chunks = append(temp.Chunks, fid)
-	}
-	fi.Chunks = temp.Chunks
-	if info.ContentLength >= 0 && fi.Size_ != info.ContentLength {
-		s.deleteTemp(iKey, temp.Chunks)
-		return common.UploadStatus{}, nil
-	}
-	if fi.Size_ != 0 {
+	if len(fi.Chunks) != 0 || len(fi.InlineData) != 0 {
 		fi.Digests = hashes.Digests()
-		stDigests = common.DigestsToMap(fi.Digests)
-		if !common.CheckDigests(info.RecvDigests, stDigests) {
-			s.deleteTemp(iKey, fi.Chunks)
-			return common.UploadStatus{}, fmt.Errorf("checksum mismatch")
-		}
 	}
 
 	fkValue, err := proto.Marshal(&fi)
 	if err != nil {
 		return common.UploadStatus{}, err
 	}
-	err = s.db.Update(func(tx *badger.Txn) error {
-		if err := maybeDeletePrevBadger(tx, fk); err != nil {
+	permKey := makePermKey(info.Name)
+	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
+		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
 			return err
 		}
-		if err := tx.Set(fk, fkValue); err != nil {
+		if err := tx.Set(permKey, fkValue); err != nil {
 			return err
 		}
-		return tx.Delete(iKey)
+		if len(fi.Chunks) != 0 {
+			return tx.Delete(cw.tempKey)
+		}
+		return nil
 	})
 	if err != nil {
-		s.deleteTemp(iKey, fi.Chunks)
 		return common.UploadStatus{}, err
 	}
 
 	return common.UploadStatus{
-		Digests: stDigests,
-		Size:    fi.Size_,
+		Digests: common.DigestsToMap(hashes.Digests()),
+		Size:    n,
 	}, nil
+
 }
 
 func getFileInfo64(tx *badger.Txn, key []byte, fi *pb.FileInfo64) error {
