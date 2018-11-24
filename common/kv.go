@@ -70,6 +70,7 @@ type DownloadResult interface {
 	ModuleType() string
 	Digests() *pb.Digests
 	WriteTo(ctx context.Context, w io.Writer, limit int64) error
+	io.Reader
 }
 
 type UploadStatus struct {

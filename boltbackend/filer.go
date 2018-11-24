@@ -81,6 +81,8 @@ func (r downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) e
 	return r.f.writeChunks(ctx, w, r.fi.GetChunks(), limit)
 }
 
+func (r downloadResult) Read(p []byte) (int, error) { return 0, io.EOF }
+
 func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResult, error) {
 	fi, err := f.getFileInfo(ctx, path)
 	if err != nil {

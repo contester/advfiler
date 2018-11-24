@@ -59,7 +59,7 @@ func (s *KV) List(_ context.Context, prefix string) (res []string, err error) {
 		iter := tx.NewIterator(opts)
 		defer iter.Close()
 		for iter.Seek(pfx); iter.ValidForPrefix(pfx); iter.Next() {
-			res = append(res, string(iter.Item().Key()[1:]))
+			res = append(res, string(iter.Item().Key()[len(s.prefix):]))
 		}
 		return nil
 	})

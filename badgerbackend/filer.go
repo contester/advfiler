@@ -112,10 +112,7 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 
 type chunkingWriter struct {
 	f       *Filer
-//	permKey []byte
 	tempKey []byte
-//	fi      pb.FileInfo64
-//	hashes  *common.Hashes
 	inlineData []byte
 	chunks  pb.ChunkList
 }
@@ -154,13 +151,19 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if err != nil {
 		return common.UploadStatus{}, err
 	}
-	bw.Close()
+	if err = bw.Flush(); err != nil {
+		return common.UploadStatus{}, err
+	}
+	if err = bw.Close(); err != nil {
+		return common.UploadStatus{}, err
+	}
 
 	fi := pb.FileInfo64{
 		ModuleType: info.ModuleType,
 		Size_: n,
 		InlineData: cw.inlineData,
 		Chunks: cw.chunks.Chunks,
+		Compression: pb.CT_SNAPPY,
 	}
 
 	if len(fi.Chunks) != 0 || len(fi.InlineData) != 0 {
@@ -222,13 +225,49 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 type downloadResult struct {
 	fi pb.FileInfo64
 	f  *Filer
+	buf []byte
 }
 
-func (r downloadResult) Size() int64          { return r.fi.Size_ }
-func (r downloadResult) ModuleType() string   { return r.fi.ModuleType }
-func (r downloadResult) Digests() *pb.Digests { return r.fi.Digests }
-func (r downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
+func (r *downloadResult) Size() int64          { return r.fi.Size_ }
+func (r *downloadResult) ModuleType() string   { return r.fi.ModuleType }
+func (r *downloadResult) Digests() *pb.Digests { return r.fi.Digests }
+func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
 	return r.f.writeChunks(ctx, w, &r.fi, limit)
+}
+
+func (r *downloadResult) Read(p []byte) (int, error) {
+	// log.Infof("r: %d", len(p))
+	if len(r.buf) == 0 && len(r.fi.Chunks) == 0 {
+		return 0, io.EOF
+	}
+	if len(p) == 0 { return 0, nil }
+	if len(r.buf) == 0 && len(r.fi.Chunks) != 0 {
+		var err error
+		r.buf, err = r.f.readChunk(r.fi.Chunks[0], nil)
+		if err != nil {
+			return 0, err
+		}
+		r.fi.Chunks = r.fi.Chunks[1:]
+	}
+	if len(r.buf) != 0 {
+		n := copy(p, r.buf)
+		r.buf = r.buf[n:]
+		return n, nil
+	}
+	return 0, io.EOF
+}
+
+func (f *Filer) readChunk(chunk uint64, data []byte) ([]byte, error) {
+	ck := makeChunkKey(chunk)
+	err := f.db.View(func(tx *badger.Txn) error {
+		item, err := tx.Get(ck)
+		if err != nil {
+			return err
+		}
+		data, err = item.ValueCopy(data)
+		return err
+	})
+	return data, err
 }
 
 func (f *Filer) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64, limit int64) error {
@@ -254,15 +293,7 @@ func (f *Filer) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64,
 		}
 	}
 	for _, ch := range fi.Chunks {
-		var data []byte
-		err := f.db.View(func(tx *badger.Txn) error {
-			item, err := tx.Get(makeChunkKey(ch))
-			if err != nil {
-				return err
-			}
-			data, err = item.ValueCopy(data)
-			return err
-		})
+		data, err := f.readChunk(ch, nil)
 		if err != nil {
 			return err
 		}
@@ -293,7 +324,9 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 	}); err != nil {
 		return nil, err
 	}
-	return result, nil
+	result.buf = result.fi.InlineData
+	// log.Infof("%q: id %d, chunks %d", path, len(result.buf), len(result.fi.Chunks))
+	return &result, nil
 }
 
 func (f *Filer) List(ctx context.Context, path string) ([]string, error) {

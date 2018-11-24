@@ -129,6 +129,7 @@ func getRequestProblemKey(r *http.Request) (problemKey, error) {
 }
 
 func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Request) {
+	// log.Infof("gm: %v", r)
 	if r.Method != http.MethodGet {
 		http.Error(w, "", http.StatusMethodNotAllowed)
 		return

@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
 	"git.stingr.net/stingray/advfiler/common"
+	"github.com/golang/snappy"
+	log "github.com/sirupsen/logrus"
 )
 
 type filerServer struct {
@@ -112,7 +115,19 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 	if limitValue == 0 {
 		return nil
 	}
-	return result.WriteTo(ctx, w, limitValue)
+
+	cr := snappy.NewReader(result)
+	var xr io.Reader
+	if limitValue == -1 {
+		xr = cr
+	} else {
+		xr = io.LimitReader(cr, limitValue)
+	}
+
+	n, err := io.Copy(w, xr)
+	log.Infof("f: %q rsize: %d n: %d", path, rsize, n)
+
+	return err
 }
 
 func trimOr(s, prefix, what string) (string, error) {
