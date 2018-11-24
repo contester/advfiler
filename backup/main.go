@@ -68,7 +68,7 @@ func export1(base, path string, fw *tar.Writer) error {
 	sz := resp.Header.Get("X-Fs-Content-Length")
 	isz, err := strconv.ParseInt(sz, 10, 64)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting %q: %v", base+path, err)
 	}
 	fh := tar.Header{
 		Name:     path,
