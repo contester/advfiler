@@ -178,8 +178,10 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		Compression: pb.CT_SNAPPY,
 	}
 
+	var checksumKey []byte
 	if len(fi.Chunks) != 0 || len(fi.InlineData) != 0 {
 		fi.Digests = hashes.Digests()
+		checksumKey = makeChecksumKey(fi.Digests.Sha256)
 	}
 
 	fkValue, err := proto.Marshal(&fi)
@@ -187,7 +189,6 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 	permKey := makePermKey(info.Name)
-	checksumKey := makeChecksumKey(fi.Digests.Sha256)
 
 	var dupe string
 
@@ -196,7 +197,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
 			return err
 		}
-		if len(fi.InlineData) > 512 {
+		if len(fi.InlineData) > 512 && len(checksumKey) != 0 {
 			var cv pb.ThisChecksum
 			if err = getValue(tx, checksumKey, &cv); err == nil {
 				dupe = cv.Filename
