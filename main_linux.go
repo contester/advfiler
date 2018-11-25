@@ -8,7 +8,9 @@ import (
 )
 
 func setupJournalhook() {
-	journalhook.Enable()
+	if false {
+		journalhook.Enable()
+	}
 }
 
 func activationFiles() []*os.File {
