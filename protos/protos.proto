@@ -34,8 +34,14 @@ message FileInfo64 {
     repeated uint64 chunks = 6;
     CompressionType compression = 7;
     uint64 hardlink = 8;
+    uint64 reference_count = 9;
 }
 
 message ChunkList {
     repeated uint64 chunks = 1;
+}
+
+message ThisChecksum {
+    string filename = 1;
+    uint64 hardlink = 2;
 }

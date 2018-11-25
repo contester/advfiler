@@ -44,7 +44,7 @@ var CompressionType_value = map[string]int32{
 }
 
 func (CompressionType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_protos_7c77f94247a145f0, []int{0}
+	return fileDescriptor_protos_1bc3691ea3296437, []int{0}
 }
 
 type FileChunk struct {
@@ -56,7 +56,7 @@ type FileChunk struct {
 func (m *FileChunk) Reset()      { *m = FileChunk{} }
 func (*FileChunk) ProtoMessage() {}
 func (*FileChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_7c77f94247a145f0, []int{0}
+	return fileDescriptor_protos_1bc3691ea3296437, []int{0}
 }
 func (m *FileChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -115,7 +115,7 @@ type Digests struct {
 func (m *Digests) Reset()      { *m = Digests{} }
 func (*Digests) ProtoMessage() {}
 func (*Digests) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_7c77f94247a145f0, []int{1}
+	return fileDescriptor_protos_1bc3691ea3296437, []int{1}
 }
 func (m *Digests) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -175,7 +175,7 @@ type FileInfo struct {
 func (m *FileInfo) Reset()      { *m = FileInfo{} }
 func (*FileInfo) ProtoMessage() {}
 func (*FileInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_7c77f94247a145f0, []int{2}
+	return fileDescriptor_protos_1bc3691ea3296437, []int{2}
 }
 func (m *FileInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -233,19 +233,20 @@ func (m *FileInfo) GetChunks() []*FileChunk {
 }
 
 type FileInfo64 struct {
-	Size_       int64           `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Digests     *Digests        `protobuf:"bytes,2,opt,name=digests" json:"digests,omitempty"`
-	ModuleType  string          `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
-	InlineData  []byte          `protobuf:"bytes,5,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
-	Chunks      []uint64        `protobuf:"varint,6,rep,packed,name=chunks" json:"chunks,omitempty"`
-	Compression CompressionType `protobuf:"varint,7,opt,name=compression,proto3,enum=protos.CompressionType" json:"compression,omitempty"`
-	Hardlink    uint64          `protobuf:"varint,8,opt,name=hardlink,proto3" json:"hardlink,omitempty"`
+	Size_          int64           `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Digests        *Digests        `protobuf:"bytes,2,opt,name=digests" json:"digests,omitempty"`
+	ModuleType     string          `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
+	InlineData     []byte          `protobuf:"bytes,5,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
+	Chunks         []uint64        `protobuf:"varint,6,rep,packed,name=chunks" json:"chunks,omitempty"`
+	Compression    CompressionType `protobuf:"varint,7,opt,name=compression,proto3,enum=protos.CompressionType" json:"compression,omitempty"`
+	Hardlink       uint64          `protobuf:"varint,8,opt,name=hardlink,proto3" json:"hardlink,omitempty"`
+	ReferenceCount uint64          `protobuf:"varint,9,opt,name=reference_count,json=referenceCount,proto3" json:"reference_count,omitempty"`
 }
 
 func (m *FileInfo64) Reset()      { *m = FileInfo64{} }
 func (*FileInfo64) ProtoMessage() {}
 func (*FileInfo64) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_7c77f94247a145f0, []int{3}
+	return fileDescriptor_protos_1bc3691ea3296437, []int{3}
 }
 func (m *FileInfo64) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -323,6 +324,13 @@ func (m *FileInfo64) GetHardlink() uint64 {
 	return 0
 }
 
+func (m *FileInfo64) GetReferenceCount() uint64 {
+	if m != nil {
+		return m.ReferenceCount
+	}
+	return 0
+}
+
 type ChunkList struct {
 	Chunks []uint64 `protobuf:"varint,1,rep,packed,name=chunks" json:"chunks,omitempty"`
 }
@@ -330,7 +338,7 @@ type ChunkList struct {
 func (m *ChunkList) Reset()      { *m = ChunkList{} }
 func (*ChunkList) ProtoMessage() {}
 func (*ChunkList) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_7c77f94247a145f0, []int{4}
+	return fileDescriptor_protos_1bc3691ea3296437, []int{4}
 }
 func (m *ChunkList) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -366,12 +374,64 @@ func (m *ChunkList) GetChunks() []uint64 {
 	return nil
 }
 
+type ThisChecksum struct {
+	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	Hardlink uint64 `protobuf:"varint,2,opt,name=hardlink,proto3" json:"hardlink,omitempty"`
+}
+
+func (m *ThisChecksum) Reset()      { *m = ThisChecksum{} }
+func (*ThisChecksum) ProtoMessage() {}
+func (*ThisChecksum) Descriptor() ([]byte, []int) {
+	return fileDescriptor_protos_1bc3691ea3296437, []int{5}
+}
+func (m *ThisChecksum) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ThisChecksum) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ThisChecksum.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *ThisChecksum) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ThisChecksum.Merge(dst, src)
+}
+func (m *ThisChecksum) XXX_Size() int {
+	return m.Size()
+}
+func (m *ThisChecksum) XXX_DiscardUnknown() {
+	xxx_messageInfo_ThisChecksum.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ThisChecksum proto.InternalMessageInfo
+
+func (m *ThisChecksum) GetFilename() string {
+	if m != nil {
+		return m.Filename
+	}
+	return ""
+}
+
+func (m *ThisChecksum) GetHardlink() uint64 {
+	if m != nil {
+		return m.Hardlink
+	}
+	return 0
+}
+
 func init() {
 	proto.RegisterType((*FileChunk)(nil), "protos.FileChunk")
 	proto.RegisterType((*Digests)(nil), "protos.Digests")
 	proto.RegisterType((*FileInfo)(nil), "protos.FileInfo")
 	proto.RegisterType((*FileInfo64)(nil), "protos.FileInfo64")
 	proto.RegisterType((*ChunkList)(nil), "protos.ChunkList")
+	proto.RegisterType((*ThisChecksum)(nil), "protos.ThisChecksum")
 	proto.RegisterEnum("protos.CompressionType", CompressionType_name, CompressionType_value)
 }
 func (x CompressionType) String() string {
@@ -524,6 +584,9 @@ func (this *FileInfo64) Equal(that interface{}) bool {
 	if this.Hardlink != that1.Hardlink {
 		return false
 	}
+	if this.ReferenceCount != that1.ReferenceCount {
+		return false
+	}
 	return true
 }
 func (this *ChunkList) Equal(that interface{}) bool {
@@ -552,6 +615,33 @@ func (this *ChunkList) Equal(that interface{}) bool {
 		if this.Chunks[i] != that1.Chunks[i] {
 			return false
 		}
+	}
+	return true
+}
+func (this *ThisChecksum) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ThisChecksum)
+	if !ok {
+		that2, ok := that.(ThisChecksum)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Filename != that1.Filename {
+		return false
+	}
+	if this.Hardlink != that1.Hardlink {
+		return false
 	}
 	return true
 }
@@ -600,7 +690,7 @@ func (this *FileInfo64) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 11)
+	s := make([]string, 0, 12)
 	s = append(s, "&protos.FileInfo64{")
 	s = append(s, "Size_: "+fmt.Sprintf("%#v", this.Size_)+",\n")
 	if this.Digests != nil {
@@ -611,6 +701,7 @@ func (this *FileInfo64) GoString() string {
 	s = append(s, "Chunks: "+fmt.Sprintf("%#v", this.Chunks)+",\n")
 	s = append(s, "Compression: "+fmt.Sprintf("%#v", this.Compression)+",\n")
 	s = append(s, "Hardlink: "+fmt.Sprintf("%#v", this.Hardlink)+",\n")
+	s = append(s, "ReferenceCount: "+fmt.Sprintf("%#v", this.ReferenceCount)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -621,6 +712,17 @@ func (this *ChunkList) GoString() string {
 	s := make([]string, 0, 5)
 	s = append(s, "&protos.ChunkList{")
 	s = append(s, "Chunks: "+fmt.Sprintf("%#v", this.Chunks)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ThisChecksum) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&protos.ThisChecksum{")
+	s = append(s, "Filename: "+fmt.Sprintf("%#v", this.Filename)+",\n")
+	s = append(s, "Hardlink: "+fmt.Sprintf("%#v", this.Hardlink)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -823,6 +925,11 @@ func (m *FileInfo64) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(m.Hardlink))
 	}
+	if m.ReferenceCount != 0 {
+		dAtA[i] = 0x48
+		i++
+		i = encodeVarintProtos(dAtA, i, uint64(m.ReferenceCount))
+	}
 	return i, nil
 }
 
@@ -857,6 +964,35 @@ func (m *ChunkList) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(j5))
 		i += copy(dAtA[i:], dAtA6[:j5])
+	}
+	return i, nil
+}
+
+func (m *ThisChecksum) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ThisChecksum) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Filename) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintProtos(dAtA, i, uint64(len(m.Filename)))
+		i += copy(dAtA[i:], m.Filename)
+	}
+	if m.Hardlink != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintProtos(dAtA, i, uint64(m.Hardlink))
 	}
 	return i, nil
 }
@@ -971,6 +1107,9 @@ func (m *FileInfo64) Size() (n int) {
 	if m.Hardlink != 0 {
 		n += 1 + sovProtos(uint64(m.Hardlink))
 	}
+	if m.ReferenceCount != 0 {
+		n += 1 + sovProtos(uint64(m.ReferenceCount))
+	}
 	return n
 }
 
@@ -986,6 +1125,22 @@ func (m *ChunkList) Size() (n int) {
 			l += sovProtos(uint64(e))
 		}
 		n += 1 + sovProtos(uint64(l)) + l
+	}
+	return n
+}
+
+func (m *ThisChecksum) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Filename)
+	if l > 0 {
+		n += 1 + l + sovProtos(uint64(l))
+	}
+	if m.Hardlink != 0 {
+		n += 1 + sovProtos(uint64(m.Hardlink))
 	}
 	return n
 }
@@ -1052,6 +1207,7 @@ func (this *FileInfo64) String() string {
 		`Chunks:` + fmt.Sprintf("%v", this.Chunks) + `,`,
 		`Compression:` + fmt.Sprintf("%v", this.Compression) + `,`,
 		`Hardlink:` + fmt.Sprintf("%v", this.Hardlink) + `,`,
+		`ReferenceCount:` + fmt.Sprintf("%v", this.ReferenceCount) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1062,6 +1218,17 @@ func (this *ChunkList) String() string {
 	}
 	s := strings.Join([]string{`&ChunkList{`,
 		`Chunks:` + fmt.Sprintf("%v", this.Chunks) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ThisChecksum) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ThisChecksum{`,
+		`Filename:` + fmt.Sprintf("%v", this.Filename) + `,`,
+		`Hardlink:` + fmt.Sprintf("%v", this.Hardlink) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1760,6 +1927,25 @@ func (m *FileInfo64) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceCount", wireType)
+			}
+			m.ReferenceCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReferenceCount |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipProtos(dAtA[iNdEx:])
@@ -1904,6 +2090,104 @@ func (m *ChunkList) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ThisChecksum) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ThisChecksum: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ThisChecksum: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filename", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthProtos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filename = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Hardlink", wireType)
+			}
+			m.Hardlink = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Hardlink |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProtos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProtos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipProtos(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2009,36 +2293,39 @@ var (
 	ErrIntOverflowProtos   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("protos.proto", fileDescriptor_protos_7c77f94247a145f0) }
+func init() { proto.RegisterFile("protos.proto", fileDescriptor_protos_1bc3691ea3296437) }
 
-var fileDescriptor_protos_7c77f94247a145f0 = []byte{
-	// 437 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x92, 0x3f, 0x6f, 0xd3, 0x40,
-	0x18, 0xc6, 0xfd, 0xe2, 0x10, 0xc7, 0xaf, 0x03, 0x0d, 0x37, 0xc0, 0x89, 0xe1, 0x6a, 0x99, 0xc5,
-	0x20, 0x51, 0xa9, 0xa1, 0xad, 0xc4, 0x08, 0x29, 0x20, 0x04, 0x0a, 0xd5, 0x91, 0x85, 0x29, 0x3a,
-	0x6a, 0x17, 0x9f, 0x1a, 0xff, 0x51, 0xce, 0x19, 0xca, 0xc4, 0x47, 0x60, 0xe1, 0x3b, 0xf0, 0x51,
-	0x18, 0x33, 0x76, 0x24, 0xce, 0xc2, 0xd8, 0x0f, 0xc0, 0x80, 0xee, 0x6c, 0xa7, 0x11, 0x7b, 0x27,
-	0xbf, 0xcf, 0xbd, 0xa7, 0xe7, 0xf9, 0xdd, 0x23, 0x63, 0xbf, 0x98, 0xe7, 0x65, 0xae, 0xf6, 0xcc,
-	0x87, 0x74, 0x6b, 0x15, 0xbc, 0x43, 0xf7, 0xb5, 0x9c, 0xc5, 0xa3, 0x64, 0x91, 0x9d, 0x93, 0x01,
-	0xda, 0x67, 0x32, 0xa2, 0xe0, 0x43, 0xe8, 0x72, 0x3d, 0x12, 0x8a, 0x8e, 0x4a, 0xc4, 0xbe, 0x5a,
-	0xa4, 0xf4, 0x96, 0x0f, 0x61, 0x9f, 0xb7, 0x92, 0x10, 0xec, 0x28, 0xf9, 0x35, 0xa6, 0xb6, 0x0f,
-	0xa1, 0xcd, 0xcd, 0x1c, 0xbc, 0x41, 0xe7, 0x58, 0x7e, 0x89, 0x55, 0xa9, 0xcc, 0x3a, 0x11, 0xfb,
-	0xc6, 0xab, 0xcf, 0xcd, 0xac, 0xed, 0xd3, 0xe8, 0xb0, 0x31, 0xd2, 0x23, 0xb9, 0x8f, 0x5d, 0x95,
-	0x88, 0xe1, 0xe1, 0x91, 0xb1, 0xe9, 0xf3, 0x46, 0x05, 0x3f, 0x00, 0x7b, 0x1a, 0xeb, 0x6d, 0x76,
-	0x96, 0x6f, 0x92, 0xe0, 0x3a, 0x89, 0x3c, 0x46, 0x27, 0xaa, 0x93, 0x8c, 0x9d, 0x37, 0xdc, 0xd9,
-	0x6b, 0x9e, 0xd7, 0x00, 0xf0, 0x76, 0x4f, 0x76, 0xd1, 0x4b, 0xf3, 0x68, 0x31, 0x8b, 0xa7, 0xe5,
-	0x45, 0x51, 0xf3, 0xba, 0x1c, 0xeb, 0xa3, 0xc9, 0x45, 0xa1, 0xbd, 0xba, 0xa7, 0xfa, 0xf9, 0x8a,
-	0x76, 0x7c, 0x3b, 0xf4, 0x86, 0xf7, 0x5a, 0xab, 0x4d, 0x31, 0xbc, 0xb9, 0x10, 0xfc, 0x05, 0xc4,
-	0x96, 0xeb, 0xe8, 0xe0, 0xc6, 0xc9, 0x76, 0xd1, 0x93, 0xd9, 0x4c, 0x66, 0xf1, 0x34, 0x12, 0xa5,
-	0xa0, 0xb7, 0x4d, 0x47, 0x58, 0x1f, 0x1d, 0x8b, 0x52, 0xe8, 0xfe, 0x1a, 0xf4, 0xae, 0x6f, 0x87,
-	0x9d, 0x96, 0x93, 0x3c, 0x47, 0xef, 0x34, 0x4f, 0x8b, 0x79, 0xac, 0x94, 0xcc, 0x33, 0xea, 0xf8,
-	0x10, 0xde, 0x1d, 0x3e, 0x68, 0x41, 0x46, 0xd7, 0x2b, 0x1d, 0xc3, 0xb7, 0xef, 0x92, 0x87, 0xd8,
-	0x4b, 0xc4, 0x3c, 0x9a, 0xc9, 0xec, 0x9c, 0xf6, 0x7c, 0x08, 0x3b, 0x7c, 0xa3, 0x83, 0x47, 0xe8,
-	0x9a, 0x3e, 0xde, 0x4b, 0x55, 0x6e, 0x65, 0xc3, 0x76, 0xf6, 0x93, 0xa7, 0xb8, 0xf3, 0x5f, 0x00,
-	0xf1, 0xd0, 0x19, 0x4d, 0xa6, 0xe3, 0x0f, 0xe3, 0x57, 0x03, 0x8b, 0xdc, 0x41, 0x77, 0x34, 0x99,
-	0x7e, 0x1c, 0xbf, 0x38, 0x39, 0xf9, 0x34, 0x80, 0x97, 0x07, 0xcb, 0x15, 0xb3, 0x2e, 0x57, 0xcc,
-	0xba, 0x5a, 0x31, 0xf8, 0x56, 0x31, 0xf8, 0x59, 0x31, 0xf8, 0x55, 0x31, 0x58, 0x56, 0x0c, 0x7e,
-	0x57, 0x0c, 0xfe, 0x54, 0xcc, 0xba, 0xaa, 0x18, 0x7c, 0x5f, 0x33, 0x6b, 0xb9, 0x66, 0xd6, 0xe5,
-	0x9a, 0x59, 0x9f, 0xeb, 0xdf, 0xf7, 0xd9, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0xad, 0x35, 0xeb,
-	0x97, 0xd5, 0x02, 0x00, 0x00,
+var fileDescriptor_protos_1bc3691ea3296437 = []byte{
+	// 491 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x93, 0xbd, 0x8e, 0xd3, 0x40,
+	0x10, 0xc7, 0xbd, 0x49, 0x48, 0xe2, 0x71, 0xb8, 0x84, 0x2d, 0xc0, 0xba, 0x62, 0xcf, 0x32, 0x05,
+	0x06, 0x89, 0x93, 0x2e, 0xdc, 0x9d, 0x44, 0x09, 0x3e, 0x0e, 0x21, 0x50, 0x38, 0x2d, 0x69, 0xa8,
+	0x22, 0x63, 0x6f, 0xf0, 0x2a, 0xfe, 0x88, 0xbc, 0x4e, 0x71, 0x54, 0x3c, 0x02, 0x0d, 0x8f, 0x80,
+	0xc4, 0xa3, 0x50, 0xa6, 0xbc, 0x92, 0x38, 0x0d, 0xe5, 0x3d, 0x02, 0xda, 0xf5, 0xc7, 0xe5, 0xe8,
+	0xa9, 0x3c, 0xff, 0x99, 0xd1, 0x7f, 0x7e, 0x33, 0x5a, 0xc3, 0x60, 0x99, 0xa5, 0x79, 0x2a, 0x0e,
+	0xd5, 0x07, 0x77, 0x4b, 0x65, 0xbf, 0x05, 0xfd, 0x9c, 0x47, 0xcc, 0x0d, 0x57, 0xc9, 0x02, 0x8f,
+	0xa0, 0x3d, 0xe7, 0x81, 0x89, 0x2c, 0xe4, 0xe8, 0x54, 0x86, 0xd8, 0x84, 0x9e, 0x08, 0xbd, 0x23,
+	0xb1, 0x8a, 0xcd, 0x96, 0x85, 0x9c, 0x01, 0xad, 0x25, 0xc6, 0xd0, 0x11, 0xfc, 0x0b, 0x33, 0xdb,
+	0x16, 0x72, 0xda, 0x54, 0xc5, 0xf6, 0x6b, 0xe8, 0x9d, 0xf1, 0xcf, 0x4c, 0xe4, 0x42, 0x95, 0x43,
+	0xef, 0x48, 0x79, 0x0d, 0xa8, 0x8a, 0xa5, 0x7d, 0x1c, 0x9c, 0x54, 0x46, 0x32, 0xc4, 0xf7, 0xa1,
+	0x2b, 0x42, 0x6f, 0x7c, 0x72, 0xaa, 0x6c, 0x06, 0xb4, 0x52, 0xf6, 0x77, 0x04, 0x7d, 0x89, 0xf5,
+	0x26, 0x99, 0xa7, 0xcd, 0x24, 0x74, 0x33, 0x09, 0x3f, 0x86, 0x5e, 0x50, 0x4e, 0x52, 0x76, 0xc6,
+	0x78, 0x78, 0x58, 0xad, 0x57, 0x01, 0xd0, 0xba, 0x8e, 0x0f, 0xc0, 0x88, 0xd3, 0x60, 0x15, 0xb1,
+	0x59, 0x7e, 0xb9, 0x2c, 0x79, 0x75, 0x0a, 0x65, 0x6a, 0x7a, 0xb9, 0x94, 0x5e, 0x5d, 0x5f, 0xae,
+	0x2f, 0xcc, 0x8e, 0xd5, 0x76, 0x8c, 0xf1, 0xbd, 0xda, 0xaa, 0x39, 0x0c, 0xad, 0x1a, 0xec, 0x1f,
+	0x2d, 0x80, 0x9a, 0xeb, 0xf4, 0xf8, 0xbf, 0x93, 0x1d, 0x80, 0xc1, 0x93, 0x88, 0x27, 0x6c, 0x16,
+	0x78, 0xb9, 0x67, 0xde, 0x51, 0x37, 0x82, 0x32, 0x75, 0xe6, 0xe5, 0x9e, 0xbc, 0x5f, 0x85, 0xde,
+	0xb5, 0xda, 0x4e, 0xa7, 0xe6, 0xc4, 0xcf, 0xc1, 0xf0, 0xd3, 0x78, 0x99, 0x31, 0x21, 0x78, 0x9a,
+	0x98, 0x3d, 0x0b, 0x39, 0x7b, 0xe3, 0x07, 0x35, 0x88, 0x7b, 0x53, 0x92, 0x63, 0xe8, 0x6e, 0x2f,
+	0xde, 0x87, 0x7e, 0xe8, 0x65, 0x41, 0xc4, 0x93, 0x85, 0xd9, 0xb7, 0x90, 0xd3, 0xa1, 0x8d, 0xc6,
+	0x8f, 0x60, 0x98, 0xb1, 0x39, 0xcb, 0x58, 0xe2, 0xb3, 0x99, 0x9f, 0xae, 0x92, 0xdc, 0xd4, 0x55,
+	0xcb, 0x5e, 0x93, 0x76, 0x65, 0xd6, 0x7e, 0x08, 0xba, 0x3a, 0xdc, 0x3b, 0x2e, 0xf2, 0x1d, 0x48,
+	0xb4, 0x0b, 0x69, 0x9f, 0xc3, 0x60, 0x1a, 0x72, 0xe1, 0x86, 0xcc, 0x5f, 0xc8, 0x17, 0xb5, 0x0f,
+	0xfd, 0x39, 0x8f, 0x58, 0xe2, 0xc5, 0xac, 0x7a, 0x82, 0x8d, 0xbe, 0x45, 0xd5, 0xba, 0x4d, 0xf5,
+	0xe4, 0x29, 0x0c, 0xff, 0xd9, 0x08, 0x1b, 0xd0, 0x73, 0xa7, 0xb3, 0xc9, 0xfb, 0xc9, 0xab, 0x91,
+	0x86, 0xef, 0x82, 0xee, 0x4e, 0x67, 0x1f, 0x26, 0x2f, 0x2e, 0x2e, 0x3e, 0x8e, 0xd0, 0xcb, 0xe3,
+	0xf5, 0x86, 0x68, 0x57, 0x1b, 0xa2, 0x5d, 0x6f, 0x08, 0xfa, 0x5a, 0x10, 0xf4, 0xb3, 0x20, 0xe8,
+	0x57, 0x41, 0xd0, 0xba, 0x20, 0xe8, 0x77, 0x41, 0xd0, 0x9f, 0x82, 0x68, 0xd7, 0x05, 0x41, 0xdf,
+	0xb6, 0x44, 0x5b, 0x6f, 0x89, 0x76, 0xb5, 0x25, 0xda, 0xa7, 0xf2, 0x7f, 0x79, 0xf6, 0x37, 0x00,
+	0x00, 0xff, 0xff, 0x6d, 0xe6, 0x50, 0xed, 0x46, 0x03, 0x00, 0x00,
 }
