@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -50,6 +51,7 @@ func DigestsToMap(d *pb.Digests) map[string]string {
 	r := make(map[string]string)
 	maybeSetDigest(r, "MD5", d.Md5)
 	maybeSetDigest(r, "SHA", d.Sha1)
+	maybeSetDigest(r, "SHA256", d.Sha256)
 	if len(r) == 0 {
 		return nil
 	}
@@ -79,27 +81,30 @@ type UploadStatus struct {
 }
 
 type Hashes struct {
-	Sha1, Md5 hash.Hash
+	Sha256, Sha1, Md5 hash.Hash
 }
 
 func (s *Hashes) Write(p []byte) (n int, err error) {
 	if n, err = s.Md5.Write(p); err != nil {
 		return n, err
 	}
+	s.Sha256.Write(p)
 	return s.Sha1.Write(p)
 }
 
 func (s *Hashes) Digests() *pb.Digests {
 	return &pb.Digests{
-		Md5:  s.Md5.Sum(nil),
-		Sha1: s.Sha1.Sum(nil),
+		Md5:    s.Md5.Sum(nil),
+		Sha1:   s.Sha1.Sum(nil),
+		Sha256: s.Sha256.Sum(nil),
 	}
 }
 
 func NewHashes() *Hashes {
 	return &Hashes{
-		Sha1: sha1.New(),
-		Md5:  md5.New(),
+		Sha1:   sha1.New(),
+		Md5:    md5.New(),
+		Sha256: sha256.New(),
 	}
 }
 
