@@ -203,6 +203,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 				dupe = cv.Filename
 			}
 			if dupe == "" {
+				log.Infof("setting checksum %q %x", info.Name, checksumKey)
 				cv.Filename = info.Name
 				dupb, _ := proto.Marshal(&cv)
 				if err = tx.Set(checksumKey, dupb); err != nil {
