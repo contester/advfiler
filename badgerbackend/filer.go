@@ -201,6 +201,13 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 			if err = getValue(tx, checksumKey, &cv); err == nil {
 				dupe = cv.Filename
 			}
+			if dupe == "" {
+				cv.Filename = info.Name
+				dupb, _ := proto.Marshal(&cv)
+				if err = tx.Set(checksumKey, dupb); err != nil {
+					return err
+				}
+			}
 		}
 		if err := tx.Set(permKey, fkValue); err != nil {
 			return err
