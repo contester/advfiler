@@ -107,6 +107,7 @@ func main() {
 	http.HandleFunc("/fs2/", f.HandlePackage)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)
+	http.HandleFunc("/tar/", f.handleTarUpload)
 	for _, s := range httpSockets {
 		go http.Serve(s, nil)
 	}

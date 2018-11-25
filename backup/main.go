@@ -60,6 +60,15 @@ func importAll(base string) error {
 	}
 }
 
+func import2(base string) error {
+	req, err := http.NewRequest(http.MethodPut, base+"tar/", os.Stdin)
+	if err != nil {
+		return err
+	}
+	_, err = http.DefaultClient.Do(req)
+	return err
+}
+
 func export1(base, path string, fw *tar.Writer) error {
 	resp, err := http.Get(base + path)
 	if err != nil {
@@ -101,6 +110,8 @@ func main() {
 		err = exportAll(*backend, flag.Arg(0))
 	case "import":
 		err = importAll(*backend)
+	case "import2":
+		err = import2(*backend)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err)

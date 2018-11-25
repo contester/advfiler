@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"context"
 	"encoding/json"
@@ -296,5 +297,29 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		return
+	}
+
+	fr := tar.NewReader(r.Body)
+	for {
+		h, err := fr.Next()
+		if err == io.EOF {
+			return
+		}
+		fi := common.FileInfo{
+			ModuleType:    h.Xattrs["user.fs_module_type"],
+			Name:          h.Name,
+			ContentLength: h.Size,
+		}
+		_, err = f.backend.Upload(r.Context(), fi, fr)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 	}
 }
