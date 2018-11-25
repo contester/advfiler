@@ -1,6 +1,7 @@
 package badgerbackend
 
 import (
+	"bufio"
 	"context"
 	"encoding/binary"
 	"io"
@@ -121,9 +122,8 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
-	if s.inlineData == nil {
+	if len(s.inlineData) == 0 {
 		s.inlineData = append(s.inlineData, b...)
-		//s.hashes.Write(b)
 		return len(b), nil
 	}
 	fid, err := s.f.insertChunk(s.tempKey, s.chunks, b)
@@ -142,8 +142,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		f: s,
 		tempKey: makeTempKey(info.Name),
 	}
+	xw := bufio.NewWriterSize(&cw, 63 * 1024)
 
-	bw := snappy.NewBufferedWriter(&cw)
+	bw := snappy.NewBufferedWriter(xw)
 	hashes := common.NewHashes()
 	mw := io.MultiWriter(bw, hashes)
 	buf := make([]byte, 48 * 1024)
@@ -155,6 +156,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 	if err = bw.Close(); err != nil {
+		return common.UploadStatus{}, err
+	}
+	if err = xw.Flush(); err != nil {
 		return common.UploadStatus{}, err
 	}
 
