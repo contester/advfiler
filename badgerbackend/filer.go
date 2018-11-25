@@ -182,6 +182,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if len(fi.Chunks) != 0 || len(fi.InlineData) != 0 {
 		fi.Digests = hashes.Digests()
 		checksumKey = makeChecksumKey(fi.Digests.Sha256)
+		log.Infof("checksum %q %x %d", info.Name, checksumKey, len(fi.InlineData))
 	}
 
 	fkValue, err := proto.Marshal(&fi)
