@@ -12,6 +12,7 @@ import (
 	"github.com/golang/snappy"
 
 	pb "git.stingr.net/stingray/advfiler/protos"
+	log "github.com/sirupsen/logrus"
 )
 
 type Filer struct {
@@ -45,6 +46,13 @@ func makePrefixedKey(prefix byte, suffix string) []byte {
 
 func makeTempKey(name string) []byte { return makePrefixedKey(2, name) }
 func makePermKey(name string) []byte { return makePrefixedKey(3, name) }
+
+func makeChecksumKey(csum []byte) []byte {
+	result := make([]byte, len(csum) + 1)
+	result[0] = 4
+	copy(result[1:], csum)
+	return result
+}
 
 func (s *Filer) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, error) {
 	next, err := s.seq.Next()
@@ -102,7 +110,7 @@ func (s *Filer) deleteTemp(key []byte, chunks []uint64) error {
 
 func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 	var prev pb.FileInfo64
-	if err := getFileInfo64(tx, key, &prev); err != nil {
+	if err := getValue(tx, key, &prev); err != nil {
 		if err != badger.ErrKeyNotFound {
 			return err
 		}
@@ -179,15 +187,26 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 	permKey := makePermKey(info.Name)
+	checksumKey := makeChecksumKey(fi.Digests.Sha256)
+
+	var dupe string
+
 	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
+		dupe = ""
 		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
 			return err
+		}
+		if len(fi.InlineData) > 512 {
+			var cv pb.ThisChecksum
+			if err = getValue(tx, checksumKey, &cv); err == nil {
+				dupe = cv.Filename
+			}
 		}
 		if err := tx.Set(permKey, fkValue); err != nil {
 			return err
 		}
 		if len(fi.Chunks) != 0 {
-			return tx.Delete(cw.tempKey)
+			if err = tx.Delete(cw.tempKey); err != nil { return err }
 		}
 		return nil
 	})
@@ -195,6 +214,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 
+	if dupe != "" {
+		log.Infof("dup: %q and %q", info.Name, dupe)
+	}
 	return common.UploadStatus{
 		Digests: common.DigestsToMap(hashes.Digests()),
 		Size:    n,
@@ -202,13 +224,13 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 
 }
 
-func getFileInfo64(tx *badger.Txn, key []byte, fi *pb.FileInfo64) error {
+func getValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 	item, err := tx.Get(key)
 	if err != nil {
 		return err
 	}
 	return item.Value(func(v []byte) error {
-		return proto.Unmarshal(v, fi)
+		return proto.Unmarshal(v, msg)
 	})
 }
 
@@ -216,7 +238,7 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
 		var fi pb.FileInfo64
-		if err := getFileInfo64(tx, fileKey, &fi); err != nil {
+		if err := getValue(tx, fileKey, &fi); err != nil {
 			return err
 		}
 		if err := tx.Delete(fileKey); err != nil {
@@ -324,7 +346,7 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 		f: f,
 	}
 	if err := f.db.View(func(tx *badger.Txn) error {
-		return getFileInfo64(tx, fileKey, &result.fi)
+		return getValue(tx, fileKey, &result.fi)
 	}); err != nil {
 		return nil, err
 	}
