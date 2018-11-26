@@ -34,6 +34,9 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 		return nil, err
 	}
 	result.iseq.Next()
+	go func() {
+		log.Errorf("%v", result.db.RunValueLogGC(0.5))
+	}()
 	return &result, nil
 }
 
