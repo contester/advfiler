@@ -33,6 +33,7 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 	if err != nil {
 		return nil, err
 	}
+	result.iseq.Next()
 	return &result, nil
 }
 
@@ -160,6 +161,7 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 }
 
 func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.ThisChecksum, fi *pb.FileInfo64) ([]byte, error) {
+	log.Infof("linkExisting: %v", cv)
 	var leafNode pb.FileInfo64
 	var inode uint64
 	var inodeKey []byte
@@ -194,7 +196,7 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 	if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
 		return nil, err
 	}
-	if err = setValue(tx, makeInodeKey(cv.Hardlink), &leafNode); err != nil {
+	if err = setValue(tx, inodeKey, &leafNode); err != nil {
 		return nil, err
 	}
 	if err = deleteBadgerChunks(tx, fi.Chunks); err != nil {
