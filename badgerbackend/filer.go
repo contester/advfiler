@@ -15,9 +15,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var _ = log.Info
+
 type Filer struct {
 	db  *badger.DB
-	seq *badger.Sequence
+	seq, iseq *badger.Sequence
 }
 
 func NewFiler(db *badger.DB) (*Filer, error) {
@@ -27,12 +29,24 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 	if err != nil {
 		return nil, err
 	}
+	result.iseq, err = db.GetSequence([]byte{67}, 10000)
+	if err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
 func makeChunkKey(id uint64) []byte {
+	return makeUintKey(1, id)
+}
+
+func makeInodeKey(id uint64) []byte {
+	return makeUintKey(5, id)
+}
+
+func makeUintKey(pfx byte, id uint64) []byte {
 	result := make([]byte, binary.MaxVarintLen64+1)
-	result[0] = 1
+	result[0] = pfx
 	n := binary.PutUvarint(result[1:], id)
 	return result[:n+1]
 }
@@ -190,20 +204,56 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	}
 	permKey := makePermKey(info.Name)
 
-	var dupe string
-
 	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
-		dupe = ""
+		xvalue := fkValue
 		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
 			return err
 		}
 		if len(fi.InlineData) > 512 && len(checksumKey) != 0 {
 			var cv pb.ThisChecksum
-			if err = getValue(tx, checksumKey, &cv); err == nil {
-				dupe = cv.Filename
+			err := getValue(tx, checksumKey, &cv)
+			if err != nil && err != badger.ErrKeyNotFound { return err }
+
+			if err == nil {
+				if cv.Filename != "" {
+				inode, err := s.iseq.Next()
+				if err != nil { return err }
+				xfi := pb.FileInfo64{
+					Hardlink: inode,
+				}
+				xvalue, err = proto.Marshal(&xfi)
+				if err != nil { return err }
+				zfi := fi
+				zfi.ReferenceCount = 2
+				zvalue, err := proto.Marshal(&zfi)
+				if err != nil { return err }
+				if err = tx.Set(makeInodeKey(inode), zvalue); err != nil { return err }
+				if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil { return err}
+				yfi := pb.ThisChecksum{
+					Hardlink: inode,
+				}
+				yvalue, err := proto.Marshal(&yfi)
+				if err != nil { return err }
+				if err = tx.Set(checksumKey, yvalue); err != nil { return err }
+				if err = deleteBadgerChunks(tx, fi.Chunks); err != nil { return err }
+			} else {
+				var zfi pb.FileInfo64
+				inodeKey := makeInodeKey(cv.Hardlink)
+				if err := getValue(tx, inodeKey, &zfi); err != nil {
+					return err
+				}
+				zfi.ReferenceCount++
+				zvalue, err := proto.Marshal(&zfi)
+				if err != nil { return err }
+				if err = tx.Set(inodeKey, zvalue); err != nil { return err }
+				xfi := pb.FileInfo64{
+					Hardlink: cv.Hardlink,
+				}
+				xvalue, err = proto.Marshal(&xfi)
+				if err != nil { return err }
+				if err = deleteBadgerChunks(tx, fi.Chunks); err != nil { return err }
 			}
-			if dupe == "" {
-				log.Infof("setting checksum %q %x", info.Name, checksumKey)
+		} else {
 				cv.Filename = info.Name
 				dupb, _ := proto.Marshal(&cv)
 				if err = tx.Set(checksumKey, dupb); err != nil {
@@ -211,7 +261,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 				}
 			}
 		}
-		if err := tx.Set(permKey, fkValue); err != nil {
+		if err := tx.Set(permKey, xvalue); err != nil {
 			return err
 		}
 		if len(fi.Chunks) != 0 {
@@ -223,9 +273,6 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 
-	if dupe != "" {
-		log.Infof("dup: %q and %q", info.Name, dupe)
-	}
 	return common.UploadStatus{
 		Digests: common.DigestsToMap(hashes.Digests()),
 		Size:    n,
@@ -355,7 +402,11 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 		f: f,
 	}
 	if err := f.db.View(func(tx *badger.Txn) error {
-		return getValue(tx, fileKey, &result.fi)
+		if err := getValue(tx, fileKey, &result.fi); err != nil { return err }
+		if result.fi.Hardlink != 0 {
+			if err := getValue(tx, makeInodeKey(result.fi.Hardlink), &result.fi); err != nil { return err }
+		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}
