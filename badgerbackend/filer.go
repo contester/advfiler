@@ -164,7 +164,6 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 }
 
 func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.ThisChecksum, fi *pb.FileInfo64) ([]byte, error) {
-	log.Infof("linkExisting: %v", cv)
 	var leafNode pb.FileInfo64
 	var inode uint64
 	var inodeKey []byte
@@ -258,7 +257,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
 			return err
 		}
-		if len(fi.InlineData) > 512 && len(checksumKey) != 0 {
+		if len(fi.InlineData) > 16 && len(checksumKey) != 0 {
 			var cv pb.ThisChecksum
 			err := getValue(tx, checksumKey, &cv)
 			if err != nil && err != badger.ErrKeyNotFound {
