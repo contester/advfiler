@@ -18,7 +18,7 @@ import (
 var _ = log.Info
 
 type Filer struct {
-	db  *badger.DB
+	db        *badger.DB
 	seq, iseq *badger.Sequence
 }
 
@@ -62,7 +62,7 @@ func makeTempKey(name string) []byte { return makePrefixedKey(2, name) }
 func makePermKey(name string) []byte { return makePrefixedKey(3, name) }
 
 func makeChecksumKey(csum []byte) []byte {
-	result := make([]byte, len(csum) + 1)
+	result := make([]byte, len(csum)+1)
 	result[0] = 4
 	copy(result[1:], csum)
 	return result
@@ -134,10 +134,10 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 }
 
 type chunkingWriter struct {
-	f       *Filer
-	tempKey []byte
+	f          *Filer
+	tempKey    []byte
 	inlineData []byte
-	chunks  pb.ChunkList
+	chunks     pb.ChunkList
 }
 
 func (s *chunkingWriter) Write(b []byte) (int, error) {
@@ -161,15 +161,15 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
 	cw := chunkingWriter{
-		f: s,
+		f:       s,
 		tempKey: makeTempKey(info.Name),
 	}
-	xw := bufio.NewWriterSize(&cw, 63 * 1024)
+	xw := bufio.NewWriterSize(&cw, 63*1024)
 
 	bw := snappy.NewBufferedWriter(xw)
 	hashes := common.NewHashes()
 	mw := io.MultiWriter(bw, hashes)
-	buf := make([]byte, 48 * 1024)
+	buf := make([]byte, 48*1024)
 	n, err := io.CopyBuffer(mw, body, buf)
 	if err != nil {
 		return common.UploadStatus{}, err
@@ -185,10 +185,10 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	}
 
 	fi := pb.FileInfo64{
-		ModuleType: info.ModuleType,
-		Size_: n,
-		InlineData: cw.inlineData,
-		Chunks: cw.chunks.Chunks,
+		ModuleType:  info.ModuleType,
+		Size_:       n,
+		InlineData:  cw.inlineData,
+		Chunks:      cw.chunks.Chunks,
 		Compression: pb.CT_SNAPPY,
 	}
 
@@ -212,48 +212,50 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		if len(fi.InlineData) > 512 && len(checksumKey) != 0 {
 			var cv pb.ThisChecksum
 			err := getValue(tx, checksumKey, &cv)
-			if err != nil && err != badger.ErrKeyNotFound { return err }
+			if err != nil && err != badger.ErrKeyNotFound {
+				return err
+			}
 
 			if err == nil {
-				if cv.Filename != "" {
-				inode, err := s.iseq.Next()
-				if err != nil { return err }
-				xfi := pb.FileInfo64{
-					Hardlink: inode,
+					var leafNode pb.FileInfo64
+					var inode uint64
+					var inodeKey []byte
+					if cv.Filename != "" {
+					inode, err = s.iseq.Next()
+					if err != nil {
+						return err
+					}
+					leafNode = fi
+					leafNode.ReferenceCount = 2
+					if err = setValue(tx, checksumKey, &pb.ThisChecksum{
+						Hardlink: inode,
+					}); err != nil {
+						return err
+					}
+					inodeKey = makeInodeKey(inode)
+				} else {
+					inodeKey = makeInodeKey(cv.Hardlink)
+					if err := getValue(tx, inodeKey, &leafNode); err != nil {
+						return err
+					}
+					leafNode.ReferenceCount++
 				}
-				xvalue, err = proto.Marshal(&xfi)
-				if err != nil { return err }
-				zfi := fi
-				zfi.ReferenceCount = 2
-				zvalue, err := proto.Marshal(&zfi)
-				if err != nil { return err }
-				if err = tx.Set(makeInodeKey(inode), zvalue); err != nil { return err }
-				if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil { return err}
-				yfi := pb.ThisChecksum{
+				xvalue, err = proto.Marshal(&pb.FileInfo64{
 					Hardlink: inode,
-				}
-				yvalue, err := proto.Marshal(&yfi)
-				if err != nil { return err }
-				if err = tx.Set(checksumKey, yvalue); err != nil { return err }
-				if err = deleteBadgerChunks(tx, fi.Chunks); err != nil { return err }
-			} else {
-				var zfi pb.FileInfo64
-				inodeKey := makeInodeKey(cv.Hardlink)
-				if err := getValue(tx, inodeKey, &zfi); err != nil {
+				})
+				if err != nil {
 					return err
 				}
-				zfi.ReferenceCount++
-				zvalue, err := proto.Marshal(&zfi)
-				if err != nil { return err }
-				if err = tx.Set(inodeKey, zvalue); err != nil { return err }
-				xfi := pb.FileInfo64{
-					Hardlink: cv.Hardlink,
+				if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
+					return err
 				}
-				xvalue, err = proto.Marshal(&xfi)
-				if err != nil { return err }
-				if err = deleteBadgerChunks(tx, fi.Chunks); err != nil { return err }
-			}
-		} else {
+				if err = setValue(tx, makeInodeKey(cv.Hardlink), &leafNode); err != nil {
+					return err
+				}
+				if err = deleteBadgerChunks(tx, fi.Chunks); err != nil {
+					return err
+				}
+			} else {
 				cv.Filename = info.Name
 				dupb, _ := proto.Marshal(&cv)
 				if err = tx.Set(checksumKey, dupb); err != nil {
@@ -265,7 +267,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 			return err
 		}
 		if len(fi.Chunks) != 0 {
-			if err = tx.Delete(cw.tempKey); err != nil { return err }
+			if err = tx.Delete(cw.tempKey); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -290,6 +294,14 @@ func getValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 	})
 }
 
+func setValue(tx *badger.Txn, key []byte, msg proto.Message) error {
+	b, err := proto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return tx.Set(key, b)
+}
+
 func (f *Filer) Delete(ctx context.Context, path string) error {
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
@@ -305,8 +317,8 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 }
 
 type downloadResult struct {
-	fi pb.FileInfo64
-	f  *Filer
+	fi  pb.FileInfo64
+	f   *Filer
 	buf []byte
 }
 
@@ -322,7 +334,9 @@ func (r *downloadResult) Read(p []byte) (int, error) {
 	if len(r.buf) == 0 && len(r.fi.Chunks) == 0 {
 		return 0, io.EOF
 	}
-	if len(p) == 0 { return 0, nil }
+	if len(p) == 0 {
+		return 0, nil
+	}
 	if len(r.buf) == 0 && len(r.fi.Chunks) != 0 {
 		var err error
 		r.buf, err = r.f.readChunk(r.fi.Chunks[0], nil)
@@ -402,9 +416,13 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 		f: f,
 	}
 	if err := f.db.View(func(tx *badger.Txn) error {
-		if err := getValue(tx, fileKey, &result.fi); err != nil { return err }
+		if err := getValue(tx, fileKey, &result.fi); err != nil {
+			return err
+		}
 		if result.fi.Hardlink != 0 {
-			if err := getValue(tx, makeInodeKey(result.fi.Hardlink), &result.fi); err != nil { return err }
+			if err := getValue(tx, makeInodeKey(result.fi.Hardlink), &result.fi); err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil {
