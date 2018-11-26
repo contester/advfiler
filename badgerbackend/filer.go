@@ -159,6 +159,50 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.ThisChecksum, fi *pb.FileInfo64) ([]byte, error) {
+	var leafNode pb.FileInfo64
+	var inode uint64
+	var inodeKey []byte
+	if cv.Filename != "" {
+		var err error
+		inode, err = s.iseq.Next()
+		if err != nil {
+			return nil, err
+		}
+		leafNode = *fi
+		leafNode.ReferenceCount = 2
+		if err = setValue(tx, checksumKey, &pb.ThisChecksum{
+			Hardlink: inode,
+		}); err != nil {
+			return nil, err
+		}
+		inodeKey = makeInodeKey(inode)
+	} else {
+		inode = cv.Hardlink
+		inodeKey = makeInodeKey(cv.Hardlink)
+		if err := getValue(tx, inodeKey, &leafNode); err != nil {
+			return nil, err
+		}
+		leafNode.ReferenceCount++
+	}
+	xvalue, err := proto.Marshal(&pb.FileInfo64{
+		Hardlink: inode,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
+		return nil, err
+	}
+	if err = setValue(tx, makeInodeKey(cv.Hardlink), &leafNode); err != nil {
+		return nil, err
+	}
+	if err = deleteBadgerChunks(tx, fi.Chunks); err != nil {
+		return nil, err
+	}
+	return xvalue, nil
+}
+
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
 	cw := chunkingWriter{
 		f:       s,
@@ -217,42 +261,8 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 			}
 
 			if err == nil {
-					var leafNode pb.FileInfo64
-					var inode uint64
-					var inodeKey []byte
-					if cv.Filename != "" {
-					inode, err = s.iseq.Next()
-					if err != nil {
-						return err
-					}
-					leafNode = fi
-					leafNode.ReferenceCount = 2
-					if err = setValue(tx, checksumKey, &pb.ThisChecksum{
-						Hardlink: inode,
-					}); err != nil {
-						return err
-					}
-					inodeKey = makeInodeKey(inode)
-				} else {
-					inodeKey = makeInodeKey(cv.Hardlink)
-					if err := getValue(tx, inodeKey, &leafNode); err != nil {
-						return err
-					}
-					leafNode.ReferenceCount++
-				}
-				xvalue, err = proto.Marshal(&pb.FileInfo64{
-					Hardlink: inode,
-				})
+				xvalue, err = s.linkToExistingFile(tx, checksumKey, &cv, &fi)
 				if err != nil {
-					return err
-				}
-				if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
-					return err
-				}
-				if err = setValue(tx, makeInodeKey(cv.Hardlink), &leafNode); err != nil {
-					return err
-				}
-				if err = deleteBadgerChunks(tx, fi.Chunks); err != nil {
 					return err
 				}
 			} else {
