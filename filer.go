@@ -332,7 +332,7 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		if icnt >= 1000 {
 			icnt = 0
-			log.Infof("Real size: %d, saved size: %d\n", realSize, savedSize)
+			log.Infof("Real size: %d, saved size: %d", realSize, savedSize)
 		}
 	}
 	fmt.Fprintf(w, "Real size: %d, saved size: %d\n", realSize, savedSize)
