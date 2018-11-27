@@ -306,9 +306,11 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var realSize, savedSize int64
+	var icnt int
 
 	fr := tar.NewReader(r.Body)
 	for {
+		icnt++
 		h, err := fr.Next()
 		if err == io.EOF {
 			return
@@ -328,6 +330,10 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		} else {
 			realSize += res.Size
 		}
+		if icnt >= 1000 {
+			icnt = 0
+			log.Infof("Real size: %d, saved size: %d\n", realSize, savedSize)
+		}
 	}
-	fmt.Fprintf(w, "Real size: %d, saved size: %d", realSize, savedSize)
+	fmt.Fprintf(w, "Real size: %d, saved size: %d\n", realSize, savedSize)
 }
