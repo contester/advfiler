@@ -2,6 +2,7 @@ package badgerbackend
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"io"
@@ -240,10 +241,14 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		Compression: pb.CT_SNAPPY,
 	}
 
+	stDigests := hashes.Digests()
 	var checksumKey []byte
-	if len(fi.Chunks) != 0 || len(fi.InlineData) != 0 {
-		fi.Digests = hashes.Digests()
-		checksumKey = makeChecksumKey(fi.Digests.Sha256)
+	if len(fi.Chunks) != 0 {
+		fi.Digests = stDigests
+	}
+
+	if len(fi.InlineData) != 0 {
+		checksumKey = makeChecksumKey(stDigests.Sha256)
 	}
 
 	fkValue, err := proto.Marshal(&fi)
@@ -295,8 +300,8 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	}
 
 	return common.UploadStatus{
-		Digests: common.DigestsToMap(hashes.Digests()),
-		Size:    n,
+		Digests:    common.DigestsToMap(stDigests),
+		Size:       n,
 		Hardlinked: hardlinked,
 	}, nil
 
@@ -340,6 +345,12 @@ type downloadResult struct {
 	buf []byte
 }
 
+type chunkResultReader struct {
+	f *Filer
+	buf []byte
+	chunks []uint64
+}
+
 func (r *downloadResult) Size() int64          { return r.fi.Size_ }
 func (r *downloadResult) ModuleType() string   { return r.fi.ModuleType }
 func (r *downloadResult) Digests() *pb.Digests { return r.fi.Digests }
@@ -347,21 +358,21 @@ func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) 
 	return r.f.writeChunks(ctx, w, &r.fi, limit)
 }
 
-func (r *downloadResult) Read(p []byte) (int, error) {
+func (r *chunkResultReader) Read(p []byte) (int, error) {
 	// log.Infof("r: %d", len(p))
-	if len(r.buf) == 0 && len(r.fi.Chunks) == 0 {
+	if len(r.buf) == 0 && len(r.chunks) == 0 {
 		return 0, io.EOF
 	}
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if len(r.buf) == 0 && len(r.fi.Chunks) != 0 {
+	if len(r.buf) == 0 && len(r.chunks) != 0 {
 		var err error
-		r.buf, err = r.f.readChunk(r.fi.Chunks[0], nil)
+		r.buf, err = r.f.readChunk(r.chunks[0], nil)
 		if err != nil {
 			return 0, err
 		}
-		r.fi.Chunks = r.fi.Chunks[1:]
+		r.chunks = r.chunks[1:]
 	}
 	if len(r.buf) != 0 {
 		n := copy(p, r.buf)
@@ -447,6 +458,15 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 		return nil, err
 	}
 	result.buf = result.fi.InlineData
+
+	if result.fi.Digests == nil && len(result.fi.InlineData) > 0 {
+		hashes := common.NewHashes()
+		cr := snappy.NewReader(bytes.NewReader(result.fi.InlineData))
+		if _, err := io.Copy(hashes, cr); err == nil {
+			result.fi.Digests = hashes.Digests()
+		}
+	}
+
 	// log.Infof("%q: id %d, chunks %d", path, len(result.buf), len(result.fi.Chunks))
 	return &result, nil
 }
