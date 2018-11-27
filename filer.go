@@ -313,7 +313,7 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		icnt++
 		h, err := fr.Next()
 		if err == io.EOF {
-			return
+			break
 		}
 		fi := common.FileInfo{
 			ModuleType:    h.Xattrs["user.fs_module_type"],
