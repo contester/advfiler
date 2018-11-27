@@ -76,8 +76,9 @@ type DownloadResult interface {
 }
 
 type UploadStatus struct {
-	Digests map[string]string
-	Size    int64
+	Digests    map[string]string
+	Size       int64
+	Hardlinked bool
 }
 
 type Hashes struct {

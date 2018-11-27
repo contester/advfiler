@@ -65,7 +65,13 @@ func import2(base string) error {
 	if err != nil {
 		return err
 	}
-	_, err = http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	fmt.Fprintf(os.Stderr, "Status: %v\n", resp.Status)
+	io.Copy(os.Stderr, resp.Body)
 	return err
 }
 

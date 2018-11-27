@@ -251,8 +251,10 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 	permKey := makePermKey(info.Name)
+	var hardlinked bool
 
 	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
+		hardlinked = false
 		xvalue := fkValue
 		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
 			return err
@@ -269,6 +271,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 				if err != nil {
 					return err
 				}
+				hardlinked = true
 			} else {
 				cv.Filename = info.Name
 				dupb, _ := proto.Marshal(&cv)
@@ -294,6 +297,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	return common.UploadStatus{
 		Digests: common.DigestsToMap(hashes.Digests()),
 		Size:    n,
+		Hardlinked: hardlinked,
 	}, nil
 
 }

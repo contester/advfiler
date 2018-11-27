@@ -305,6 +305,8 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var realSize, savedSize int64
+
 	fr := tar.NewReader(r.Body)
 	for {
 		h, err := fr.Next()
@@ -316,10 +318,16 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 			Name:          h.Name,
 			ContentLength: h.Size,
 		}
-		_, err = f.backend.Upload(r.Context(), fi, fr)
+		res, err := f.backend.Upload(r.Context(), fi, fr)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		if res.Hardlinked {
+			savedSize += res.Size
+		} else {
+			realSize += res.Size
+		}
 	}
+	fmt.Fprintf(w, "Real size: %d, saved size: %d", realSize, savedSize)
 }
