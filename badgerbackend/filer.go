@@ -342,7 +342,7 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 type downloadResult struct {
 	fi  pb.FileInfo64
 	f   *Filer
-	buf []byte
+	body io.Reader
 }
 
 type chunkResultReader struct {
@@ -357,9 +357,11 @@ func (r *downloadResult) Digests() *pb.Digests { return r.fi.Digests }
 func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
 	return r.f.writeChunks(ctx, w, &r.fi, limit)
 }
+func (r *downloadResult) Body() io.Reader {
+	return r.body
+}
 
 func (r *chunkResultReader) Read(p []byte) (int, error) {
-	// log.Infof("r: %d", len(p))
 	if len(r.buf) == 0 && len(r.chunks) == 0 {
 		return 0, io.EOF
 	}
@@ -439,7 +441,7 @@ func (f *Filer) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64,
 	return nil
 }
 
-func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResult, error) {
+func (f *Filer) Download(ctx context.Context, path string, options common.DownloadOptions) (common.DownloadResult, error) {
 	fileKey := makePermKey(path)
 	result := downloadResult{
 		f: f,
@@ -457,7 +459,14 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 	}); err != nil {
 		return nil, err
 	}
-	result.buf = result.fi.InlineData
+
+	cdr := chunkResultReader{
+		f: f, 
+		buf: result.fi.InlineData,
+		chunks: result.fi.Chunks,
+	}
+
+	result.body = snappy.NewReader(&cdr)
 
 	if result.fi.Digests == nil && len(result.fi.InlineData) > 0 {
 		hashes := common.NewHashes()
@@ -466,8 +475,6 @@ func (f *Filer) Download(ctx context.Context, path string) (common.DownloadResul
 			result.fi.Digests = hashes.Digests()
 		}
 	}
-
-	// log.Infof("%q: id %d, chunks %d", path, len(result.buf), len(result.fi.Chunks))
 	return &result, nil
 }
 

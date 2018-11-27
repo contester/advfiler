@@ -72,7 +72,7 @@ type DownloadResult interface {
 	ModuleType() string
 	Digests() *pb.Digests
 	WriteTo(ctx context.Context, w io.Writer, limit int64) error
-	io.Reader
+	Body() io.Reader
 }
 
 type UploadStatus struct {
@@ -112,7 +112,7 @@ func NewHashes() *Hashes {
 type Backend interface {
 	Upload(ctx context.Context, info FileInfo, body io.Reader) (UploadStatus, error)
 	List(ctx context.Context, path string) ([]string, error)
-	Download(ctx context.Context, path string) (DownloadResult, error)
+	Download(ctx context.Context, path string, options DownloadOptions) (DownloadResult, error)
 	Delete(ctx context.Context, path string) error
 }
 
@@ -122,6 +122,10 @@ type FileInfo struct {
 	ModuleType    string
 	RecvDigests   map[string]string
 	Compression   pb.CompressionType
+}
+
+type DownloadOptions struct {
+	AcceptCompression []pb.CompressionType
 }
 
 type DB interface {

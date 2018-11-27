@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"git.stingr.net/stingray/advfiler/common"
-	"github.com/golang/snappy"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -87,7 +86,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		limitValue = lv
 	}
 
-	result, err := f.backend.Download(ctx, path)
+	result, err := f.backend.Download(ctx, path, common.DownloadOptions{})
 	if err != nil {
 		if err == common.NotFound {
 			http.NotFound(w, r)
@@ -117,12 +116,9 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		return nil
 	}
 
-	cr := snappy.NewReader(result)
-	var xr io.Reader
-	if limitValue == -1 {
-		xr = cr
-	} else {
-		xr = io.LimitReader(cr, limitValue)
+	var xr io.Reader = result.Body()
+	if limitValue != -1 {
+		xr = io.LimitReader(xr, limitValue)
 	}
 
 	n, err := io.Copy(w, xr)
@@ -202,7 +198,7 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 }
 
 func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
-	result, err := f.backend.Download(ctx, name)
+	result, err := f.backend.Download(ctx, name, common.DownloadOptions{})
 	if err != nil {
 		return err
 	}
@@ -218,7 +214,8 @@ func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name
 	if err != nil {
 		return err
 	}
-	return result.WriteTo(ctx, wr, -1)
+	_, err = io.Copy(wr, result.Body())
+	return err
 }
 
 func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
