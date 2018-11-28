@@ -136,6 +136,25 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 		}
 		return nil
 	}
+	if prev.Hardlink != 0 {
+		var leafNode pb.FileInfo64
+		leafNodeKey := makeInodeKey(prev.Hardlink)
+		if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
+			return err
+		}
+		if leafNode.ReferenceCount == 1 {
+			hasher := sha256.New()
+			io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
+			checksumKey := makeChecksumKey(hasher.Sum(nil))
+			prev.Chunks = leafNode.Chunks
+			if err := tx.Delete(leafNodeKey); err != nil {
+				return err
+			}
+			if err := tx.Delete(checksumKey); err != nil {
+				return err
+			}
+		}
+	}
 	return deleteBadgerChunks(tx, prev.Chunks)
 }
 
@@ -347,8 +366,12 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 				io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
 				checksumKey := makeChecksumKey(hasher.Sum(nil))
 				fi.Chunks = leafNode.Chunks
-				if err := tx.Delete(leafNodeKey); err != nil { return err }
-				if err := tx.Delete(checksumKey); err != nil { return err }
+				if err := tx.Delete(leafNodeKey); err != nil {
+					return err
+				}
+				if err := tx.Delete(checksumKey); err != nil {
+					return err
+				}
 			}
 		}
 		if len(fi.Chunks) > 0 {
