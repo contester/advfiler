@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"io"
 
@@ -335,19 +336,37 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 		if err := tx.Delete(fileKey); err != nil {
 			return err
 		}
-		return deleteBadgerChunks(tx, fi.Chunks)
+		if fi.Hardlink != 0 {
+			var leafNode pb.FileInfo64
+			leafNodeKey := makeInodeKey(fi.Hardlink)
+			if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
+				return err
+			}
+			if leafNode.ReferenceCount == 1 {
+				hasher := sha256.New()
+				io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
+				checksumKey := makeChecksumKey(hasher.Sum(nil))
+				fi.Chunks = leafNode.Chunks
+				if err := tx.Delete(leafNodeKey); err != nil { return err }
+				if err := tx.Delete(checksumKey); err != nil { return err }
+			}
+		}
+		if len(fi.Chunks) > 0 {
+			return deleteBadgerChunks(tx, fi.Chunks)
+		}
+		return nil
 	})
 }
 
 type downloadResult struct {
-	fi  pb.FileInfo64
-	f   *Filer
+	fi   pb.FileInfo64
+	f    *Filer
 	body io.Reader
 }
 
 type chunkResultReader struct {
-	f *Filer
-	buf []byte
+	f      *Filer
+	buf    []byte
 	chunks []uint64
 }
 
@@ -461,8 +480,8 @@ func (f *Filer) Download(ctx context.Context, path string, options common.Downlo
 	}
 
 	cdr := chunkResultReader{
-		f: f, 
-		buf: result.fi.InlineData,
+		f:      f,
+		buf:    result.fi.InlineData,
 		chunks: result.fi.Chunks,
 	}
 
