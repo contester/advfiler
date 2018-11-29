@@ -334,3 +334,21 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, "Real size: %d, saved size: %d\n", realSize, savedSize)
 }
+
+func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		return
+	}
+
+	files, err := f.backend.List(r.Context(), "")
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	for _, v := range files {
+		if err = f.backend.Delete(r.Context(), v); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+}
