@@ -153,6 +153,11 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 			if err := tx.Delete(checksumKey); err != nil {
 				return err
 			}
+		} else {
+			leafNode.ReferenceCount--
+			if err := setValue(tx, leafNodeKey, &leafNode); err != nil {
+				return err
+			}
 		}
 	}
 	return deleteBadgerChunks(tx, prev.Chunks)
@@ -348,36 +353,7 @@ func setValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 func (f *Filer) Delete(ctx context.Context, path string) error {
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
-		var fi pb.FileInfo64
-		if err := getValue(tx, fileKey, &fi); err != nil {
-			return err
-		}
-		if err := tx.Delete(fileKey); err != nil {
-			return err
-		}
-		if fi.Hardlink != 0 {
-			var leafNode pb.FileInfo64
-			leafNodeKey := makeInodeKey(fi.Hardlink)
-			if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
-				return err
-			}
-			if leafNode.ReferenceCount == 1 {
-				hasher := sha256.New()
-				io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
-				checksumKey := makeChecksumKey(hasher.Sum(nil))
-				fi.Chunks = leafNode.Chunks
-				if err := tx.Delete(leafNodeKey); err != nil {
-					return err
-				}
-				if err := tx.Delete(checksumKey); err != nil {
-					return err
-				}
-			}
-		}
-		if len(fi.Chunks) > 0 {
-			return deleteBadgerChunks(tx, fi.Chunks)
-		}
-		return nil
+		return maybeDeletePrevBadger(tx, fileKey)
 	})
 }
 
