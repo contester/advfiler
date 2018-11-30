@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"strings"
 
 	"git.stingr.net/stingray/advfiler/common"
 	"github.com/dgraph-io/badger"
