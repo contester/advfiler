@@ -129,6 +129,7 @@ func (s *Filer) deleteTemp(key []byte, chunks []uint64) error {
 }
 
 func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
+	log.Infof("value key: %q", key)
 	var prev pb.FileInfo64
 	if err := getValue(tx, key, &prev); err != nil {
 		if err != badger.ErrKeyNotFound {
@@ -139,6 +140,7 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 	if prev.Hardlink != 0 {
 		var leafNode pb.FileInfo64
 		leafNodeKey := makeInodeKey(prev.Hardlink)
+		log.Infof("inode key: %d", prev.Hardlink)
 		if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
 			return err
 		}
@@ -150,11 +152,13 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 			if err := tx.Delete(leafNodeKey); err != nil {
 				return err
 			}
+			log.Infof("wipe checksum key: %q", checksumKey)
 			if err := tx.Delete(checksumKey); err != nil {
 				return err
 			}
 		} else {
 			leafNode.ReferenceCount--
+			log.Infof("decref: %d", leafNode.ReferenceCount)
 			if err := setValue(tx, leafNodeKey, &leafNode); err != nil {
 				return err
 			}
@@ -351,6 +355,7 @@ func setValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 }
 
 func (f *Filer) Delete(ctx context.Context, path string) error {
+	log.Infof("delete: %q", path)
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
 		return maybeDeletePrevBadger(tx, fileKey)
