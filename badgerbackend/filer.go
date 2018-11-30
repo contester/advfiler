@@ -40,6 +40,17 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 	result.iseq.Next()
 	go func() {
 		log.Errorf("%v", result.db.RunValueLogGC(0.5))
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+
+		result.db.View(func(tx *badger.Txn) error {
+			iter := tx.NewIterator(opts)
+			defer iter.Close()
+			for ; iter.Valid(); iter.Next() {
+				log.Infof("key: %q", iter.Item().Key())
+			}
+			return nil
+		})
 	}()
 	return &result, nil
 }
