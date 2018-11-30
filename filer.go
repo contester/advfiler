@@ -312,6 +312,9 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		if err == io.EOF {
 			break
 		}
+		if h.Name == "" || strings.HasSuffix(h.Name, "/") {
+			continue
+		}
 		fi := common.FileInfo{
 			ModuleType:    h.Xattrs["user.fs_module_type"],
 			Name:          h.Name,
