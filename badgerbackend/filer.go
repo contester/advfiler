@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"io"
 
 	"git.stingr.net/stingray/advfiler/common"
@@ -238,6 +239,9 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 }
 
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
+	if info.Name == "" {
+		return common.UploadStatus{}, errors.New("can't upload to empty file")
+	}
 	cw := chunkingWriter{
 		f:       s,
 		tempKey: makeTempKey(info.Name),
@@ -510,7 +514,9 @@ func (f *Filer) List(ctx context.Context, path string) ([]string, error) {
 		iter := tx.NewIterator(opts)
 		defer iter.Close()
 		for iter.Seek(pfx); iter.ValidForPrefix(pfx); iter.Next() {
-			res = append(res, string(iter.Item().Key()[1:]))
+			if xv := string(iter.Item().Key()[1:]); xv != "" {
+				res = append(res, xv)
+			}
 		}
 		return nil
 	}); err != nil {

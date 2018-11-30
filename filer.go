@@ -346,6 +346,9 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, v := range files {
+		if v == "" {
+			continue
+		}
 		if err = f.backend.Delete(r.Context(), v); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
