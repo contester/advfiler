@@ -362,7 +362,10 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 	log.Infof("delete: %q", path)
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
-		return maybeDeletePrevBadger(tx, fileKey)
+		if err := maybeDeletePrevBadger(tx, fileKey); err != nil {
+			return err
+		}
+		return tx.Delete(fileKey)
 	})
 }
 
