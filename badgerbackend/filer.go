@@ -39,7 +39,9 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 	}
 	result.iseq.Next()
 	go func() {
-		log.Errorf("%v", result.db.RunValueLogGC(0.5))
+		for i := 0; i < 100 ; i++ {
+			log.Errorf("%v", result.db.RunValueLogGC(0.5))
+		}
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
 
@@ -51,6 +53,7 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 			}
 			return nil
 		})
+		log.Infof("no keys")
 	}()
 	return &result, nil
 }
