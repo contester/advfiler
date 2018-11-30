@@ -242,6 +242,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if info.Name == "" {
 		return common.UploadStatus{}, errors.New("can't upload to empty file")
 	}
+	if strings.HasSuffix(info.Name, "/") {
+		return common.UploadStatus{}, errors.New("can't upload to directory")
+	}
 	cw := chunkingWriter{
 		f:       s,
 		tempKey: makeTempKey(info.Name),
