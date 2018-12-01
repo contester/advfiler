@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"git.stingr.net/stingray/advfiler/common"
 	"github.com/dgraph-io/badger"
@@ -22,13 +23,14 @@ import (
 var _ = log.Info
 
 type Filer struct {
-	db        *badger.DB
-	seq, iseq *badger.Sequence
+	db                 *badger.DB
+	seq, iseq          *badger.Sequence
+	stopChan, doneChan chan struct{}
 }
 
 func NewFiler(db *badger.DB) (*Filer, error) {
 	var err error
-	result := Filer{db: db}
+	result := Filer{db: db, stopChan: make(chan struct{}, 1), doneChan: make(chan struct{}, 1)}
 	result.seq, err = db.GetSequence([]byte{66}, 10000)
 	if err != nil {
 		return nil, err
@@ -38,24 +40,30 @@ func NewFiler(db *badger.DB) (*Filer, error) {
 		return nil, err
 	}
 	result.iseq.Next()
-	go func() {
-		for i := 0; i < 100 ; i++ {
-			log.Errorf("%v", result.db.RunValueLogGC(0.5))
-		}
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-
-		result.db.View(func(tx *badger.Txn) error {
-			iter := tx.NewIterator(opts)
-			defer iter.Close()
-			for ; iter.Valid(); iter.Next() {
-				log.Infof("key: %q", iter.Item().Key())
-			}
-			return nil
-		})
-		log.Infof("no keys")
-	}()
+	go result.run()
 	return &result, nil
+}
+
+func (f *Filer) Close() {
+	close(f.stopChan)
+	<-f.doneChan
+}
+
+func (f *Filer) run() {
+	defer close(f.doneChan)
+	for {
+		select {
+		case <-f.stopChan:
+			return
+		case <-time.After(time.Minute * 60):
+			err := f.db.RunValueLogGC(0.5)
+			if err != nil {
+				log.Infof("value log GC successful")
+			} else {
+				log.Infof("value log GC failed, %v", err)
+			}
+		}
+	}
 }
 
 func makeChunkKey(id uint64) []byte {

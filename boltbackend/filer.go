@@ -95,6 +95,8 @@ func (f *Filer) Download(ctx context.Context, path string, options common.Downlo
 	}, nil
 }
 
+func (f *Filer) Close() {}
+
 func (f *Filer) getFileInfo(ctx context.Context, path string) (*pb.FileInfo, error) {
 	var fi pb.FileInfo
 	if err := common.KVGetProto(ctx, f.kv, path, &fi); err != nil {

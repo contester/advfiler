@@ -114,6 +114,7 @@ type Backend interface {
 	List(ctx context.Context, path string) ([]string, error)
 	Download(ctx context.Context, path string, options DownloadOptions) (DownloadResult, error)
 	Delete(ctx context.Context, path string) error
+	Close()
 }
 
 type FileInfo struct {

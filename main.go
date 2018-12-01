@@ -85,6 +85,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("can't create badger filer: %v", err)
 		}
+		defer filerBackend.Close()
 		meKV = badgerbackend.NewKV(mbdb, nil)
 	} else {
 		if config.BoltDB == "" {
