@@ -51,7 +51,7 @@ func DigestsToMap(d *pb.Digests) map[string]string {
 	r := make(map[string]string)
 	maybeSetDigest(r, "MD5", d.Md5)
 	maybeSetDigest(r, "SHA", d.Sha1)
-	maybeSetDigest(r, "SHA256", d.Sha256)
+	maybeSetDigest(r, "SHA-256", d.Sha256)
 	if len(r) == 0 {
 		return nil
 	}
