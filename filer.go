@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,22 +14,41 @@ import (
 	"strings"
 
 	"git.stingr.net/stingray/advfiler/common"
+	pb "git.stingr.net/stingray/advfiler/protos"
 	log "github.com/sirupsen/logrus"
 )
 
-type filerServer struct {
-	backend   common.Backend
-	urlPrefix string
+type AuthCheck interface {
+	Check(ctx context.Context, token string, action pb.AuthAction, path string) (bool, error)
 }
 
-func NewFiler(backend common.Backend) *filerServer {
+type filerServer struct {
+	backend     common.Backend
+	urlPrefix   string
+	authChecker AuthCheck
+}
+
+func NewFiler(backend common.Backend, authCheck AuthCheck) *filerServer {
 	return &filerServer{
-		backend:   backend,
-		urlPrefix: "/fs/",
+		backend:     backend,
+		urlPrefix:   "/fs/",
+		authChecker: authCheck,
 	}
 }
 
+func tokenFromHeader(req *http.Request) string {
+	if ah := req.Header.Get("Authorization"); len(ah) > 7 && strings.EqualFold(ah[0:7], "BEARER ") {
+		return ah[7:]
+	}
+	return ""
+}
+
+var errUnauthorized = errors.New("unauthorized")
+
 func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_READ, path); !v {
+		return errUnauthorized
+	}
 	names, err := f.backend.List(ctx, path)
 	if err != nil {
 		return err
@@ -75,6 +95,10 @@ func parseDigests(dh string) map[string]string {
 func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" || path[len(path)-1] == '/' {
 		return f.handleList(ctx, w, r, path)
+	}
+
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_READ, path); !v {
+		return errUnauthorized
 	}
 
 	limitValue := int64(-1)
@@ -149,6 +173,10 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
 	}
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_WRITE, path); !v {
+		return errUnauthorized
+	}
+
 	fi := common.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 		Name:       path,
@@ -184,6 +212,9 @@ type multiDownloadRequest struct {
 }
 
 func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_READ, ""); !v {
+		return errUnauthorized
+	}
 	decoder := json.NewDecoder(r.Body)
 	var mdreq multiDownloadRequest
 	if err := decoder.Decode(&mdreq); err != nil {
@@ -248,6 +279,11 @@ func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, probl
 }
 
 func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_READ, ""); !v {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	cout := zip.NewWriter(w)
 	defer cout.Close()
 

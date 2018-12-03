@@ -29,6 +29,7 @@ type conf3 struct {
 	WeedBackend      string   `envconfig:"WEED_BACKEND" default:"http://localhost:9333"`
 	ManifestBadgerDB string   `envconfig:"MANIFEST_BDB"`
 	FilerBadgerDB    string   `envconfig:"FILER_BDB"`
+	ValidAuthTokens []string `envconfig:"VALID_AUTH_TOKENS"`
 }
 
 func badgerOpen(path string) (*badger.DB, error) {
@@ -63,6 +64,14 @@ func main() {
 
 	if err := envconfig.Process("advfiler", &config); err != nil {
 		log.Fatal(err)
+	}
+
+	authCheck := AuthChecker{
+		validTokens: make(map[string]struct{}, len(config.ValidAuthTokens)),
+	}
+
+	for _, v := range config.ValidAuthTokens {
+		authCheck.validTokens[v] = struct{}{}
 	}
 
 	httpSockets = append(httpSockets, systemdutil.MustListenTCPSlice(config.ListenHTTP)...)
@@ -102,7 +111,7 @@ func main() {
 		filerBackend = boltbackend.NewFiler(fiKV, &WeedClient{master: config.WeedBackend})
 	}
 
-	f := NewFiler(filerBackend)
+	f := NewFiler(filerBackend, &authCheck)
 	ms := NewMetadataServer(meKV)
 	http.Handle("/fs/", f)
 	http.HandleFunc("/fs2/", f.HandlePackage)

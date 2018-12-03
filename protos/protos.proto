@@ -45,3 +45,9 @@ message ThisChecksum {
     string filename = 1;
     uint64 hardlink = 2;
 }
+
+enum AuthAction {
+    A_NONE = 0;
+    A_READ = 1;
+    A_WRITE = 2;
+}
