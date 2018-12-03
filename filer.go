@@ -312,6 +312,9 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		if err == io.EOF {
 			break
 		}
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
 		if h.Name == "" || strings.HasSuffix(h.Name, "/") {
 			continue
 		}
@@ -329,10 +332,6 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 			savedSize += res.Size
 		} else {
 			realSize += res.Size
-		}
-		if icnt >= 1000 {
-			icnt = 0
-			log.Infof("Real size: %d, saved size: %d", realSize, savedSize)
 		}
 	}
 	fmt.Fprintf(w, "Real size: %d, saved size: %d\n", realSize, savedSize)
