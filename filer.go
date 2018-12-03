@@ -338,6 +338,11 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_WRITE, ""); !v {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var realSize, savedSize int64
 	var icnt int
 
@@ -375,6 +380,11 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 
 func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
+		return
+	}
+
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_WRITE, ""); !v {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
