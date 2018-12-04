@@ -419,6 +419,9 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 			Name:          h.Name,
 			ContentLength: h.Size,
 		}
+		if !h.ModTime.IsZero() {
+			fi.TimestampUnix = h.ModTime.Unix()
+		}
 		res, err := f.backend.Upload(r.Context(), fi, fr)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
