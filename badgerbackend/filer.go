@@ -234,6 +234,7 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 		}); err != nil {
 			return nil, err
 		}
+		leafNode.LastModifiedTimestamp = 0
 		inodeKey = makeInodeKey(inode)
 	} else {
 		inode = cv.Hardlink
@@ -244,6 +245,7 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 		leafNode.ReferenceCount++
 	}
 	xvalue, err := proto.Marshal(&pb.FileInfo64{
+		LastModifiedTimestamp: fi.LastModifiedTimestamp,
 		Hardlink: inode,
 	})
 	if err != nil {
@@ -298,6 +300,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		InlineData:  cw.inlineData,
 		Chunks:      cw.chunks.Chunks,
 		Compression: pb.CT_SNAPPY,
+		LastModifiedTimestamp: info.TimestampUnix,
 	}
 
 	stDigests := hashes.Digests()
@@ -408,6 +411,7 @@ type chunkResultReader struct {
 }
 
 func (r *downloadResult) Size() int64          { return r.fi.Size_ }
+func (r *downloadResult) LastModifiedTimestamp() int64          { return r.fi.LastModifiedTimestamp }
 func (r *downloadResult) ModuleType() string   { return r.fi.ModuleType }
 func (r *downloadResult) Digests() *pb.Digests { return r.fi.Digests }
 func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
@@ -507,9 +511,11 @@ func (f *Filer) Download(ctx context.Context, path string, options common.Downlo
 			return err
 		}
 		if result.fi.Hardlink != 0 {
+			lms := result.fi.LastModifiedTimestamp
 			if err := getValue(tx, makeInodeKey(result.fi.Hardlink), &result.fi); err != nil {
 				return err
 			}
+			result.fi.LastModifiedTimestamp = lms
 		}
 		return nil
 	}); err != nil {

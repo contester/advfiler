@@ -74,9 +74,10 @@ type downloadResult struct {
 	f  *Filer
 }
 
-func (r downloadResult) Size() int64          { return r.fi.GetSize_() }
-func (r downloadResult) ModuleType() string   { return r.fi.GetModuleType() }
-func (r downloadResult) Digests() *pb.Digests { return r.fi.GetDigests() }
+func (r downloadResult) Size() int64                  { return r.fi.GetSize_() }
+func (r downloadResult) LastModifiedTimestamp() int64 { return 0 }
+func (r downloadResult) ModuleType() string           { return r.fi.GetModuleType() }
+func (r downloadResult) Digests() *pb.Digests         { return r.fi.GetDigests() }
 func (r downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
 	return r.f.writeChunks(ctx, w, r.fi.GetChunks(), limit)
 }

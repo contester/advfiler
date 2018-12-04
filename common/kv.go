@@ -72,6 +72,7 @@ type DownloadResult interface {
 	ModuleType() string
 	Digests() *pb.Digests
 	WriteTo(ctx context.Context, w io.Writer, limit int64) error
+	LastModifiedTimestamp() int64
 	Body() io.Reader
 }
 
@@ -123,6 +124,7 @@ type FileInfo struct {
 	ModuleType    string
 	RecvDigests   map[string]string
 	Compression   pb.CompressionType
+	TimestampUnix int64
 }
 
 type DownloadOptions struct {
