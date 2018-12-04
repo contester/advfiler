@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -96,6 +97,13 @@ func makeChecksumKey(csum []byte) []byte {
 	result[0] = 4
 	copy(result[1:], csum)
 	return result
+}
+
+func maybeWrapKNF(key []byte, err error) error {
+	if err == badger.ErrKeyNotFound {
+		return fmt.Errorf("key not found: %q", key)
+	}
+	return err
 }
 
 func (s *Filer) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, error) {
@@ -240,13 +248,13 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 		inode = cv.Hardlink
 		inodeKey = makeInodeKey(cv.Hardlink)
 		if err := getValue(tx, inodeKey, &leafNode); err != nil {
-			return nil, err
+			return nil, maybeWrapKNF(inodeKey, err)
 		}
 		leafNode.ReferenceCount++
 	}
 	xvalue, err := proto.Marshal(&pb.FileInfo64{
 		LastModifiedTimestamp: fi.LastModifiedTimestamp,
-		Hardlink: inode,
+		Hardlink:              inode,
 	})
 	if err != nil {
 		return nil, err
@@ -295,11 +303,11 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	}
 
 	fi := pb.FileInfo64{
-		ModuleType:  info.ModuleType,
-		Size_:       n,
-		InlineData:  cw.inlineData,
-		Chunks:      cw.chunks.Chunks,
-		Compression: pb.CT_SNAPPY,
+		ModuleType:            info.ModuleType,
+		Size_:                 n,
+		InlineData:            cw.inlineData,
+		Chunks:                cw.chunks.Chunks,
+		Compression:           pb.CT_SNAPPY,
 		LastModifiedTimestamp: info.TimestampUnix,
 	}
 
@@ -410,10 +418,10 @@ type chunkResultReader struct {
 	chunks []uint64
 }
 
-func (r *downloadResult) Size() int64          { return r.fi.Size_ }
-func (r *downloadResult) LastModifiedTimestamp() int64          { return r.fi.LastModifiedTimestamp }
-func (r *downloadResult) ModuleType() string   { return r.fi.ModuleType }
-func (r *downloadResult) Digests() *pb.Digests { return r.fi.Digests }
+func (r *downloadResult) Size() int64                  { return r.fi.Size_ }
+func (r *downloadResult) LastModifiedTimestamp() int64 { return r.fi.LastModifiedTimestamp }
+func (r *downloadResult) ModuleType() string           { return r.fi.ModuleType }
+func (r *downloadResult) Digests() *pb.Digests         { return r.fi.Digests }
 func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
 	return r.f.writeChunks(ctx, w, &r.fi, limit)
 }
