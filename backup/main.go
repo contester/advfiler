@@ -12,8 +12,14 @@ import (
 )
 
 func exportAll(base, path string) error {
-	fmt.Printf("exporting all from %q", base+path)
-	resp, err := http.Get(base + path)
+	req, err := http.NewRequest(http.MethodGet, base+path, nil)
+	if err != nil {
+		return err
+	}
+	if *authToken != "" {
+		req.Header.Add("Authorization", "Bearer "+*authToken)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -65,6 +71,9 @@ func import2(base string) error {
 	if err != nil {
 		return err
 	}
+	if *authToken != "" {
+		req.Header.Add("Authorization", "Bearer "+*authToken)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -76,7 +85,14 @@ func import2(base string) error {
 }
 
 func export1(base, path string, fw *tar.Writer) error {
-	resp, err := http.Get(base + path)
+	req, err := http.NewRequest(http.MethodGet, base+path, nil)
+	if err != nil {
+		return err
+	}
+	if *authToken != "" {
+		req.Header.Add("Authorization", "Bearer "+*authToken)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -104,8 +120,9 @@ func export1(base, path string, fw *tar.Writer) error {
 }
 
 var (
-	backend  = flag.String("backend", "", "")
-	modeFlag = flag.String("mode", "", "")
+	backend   = flag.String("backend", "", "")
+	modeFlag  = flag.String("mode", "", "")
+	authToken = flag.String("auth", "", "")
 )
 
 func main() {
