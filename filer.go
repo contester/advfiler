@@ -254,6 +254,30 @@ func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name
 	return err
 }
 
+func (f *filerServer) writeRemoteFileTar(ctx context.Context, w *tar.Writer, name string) error {
+	result, err := f.backend.Download(ctx, name, common.DownloadOptions{})
+	if err != nil {
+		return err
+	}
+	fh := tar.Header{
+		Name:     name,
+		Mode:     0666,
+		Size:     result.Size(),
+		Typeflag: tar.TypeReg,
+	}
+	if tm := result.LastModifiedTimestamp(); tm != 0 {
+		fh.ModTime = time.Unix(tm, 0)
+	}
+	if mn := result.ModuleType(); mn != "" {
+		fh.Xattrs = map[string]string{"user.fs_module_type": mn}
+	}
+	if err = w.WriteHeader(&fh); err != nil {
+		return err
+	}
+	_, err = io.Copy(w, result.Body())
+	return err
+}
+
 func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
 	prefix := "problem/" + problemID + "/"
 	names, _ := f.backend.List(ctx, prefix)
@@ -338,7 +362,33 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (f *filerServer) handleTarDownload(w http.ResponseWriter, r *http.Request) {
+	path := r.FormValue("path")
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_READ, path); !v {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	names, err := f.backend.List(r.Context(), path)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	sort.Strings(names)
+
+	fw := tar.NewWriter(w)
+	defer fw.Close()
+
+	for _, v := range names {
+		f.writeRemoteFileTar(r.Context(), fw, v)
+	}
+}
+
 func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		f.handleTarDownload(w, r)
+		return
+	}
 	if r.Method != http.MethodPut {
 		return
 	}
