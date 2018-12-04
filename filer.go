@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"git.stingr.net/stingray/advfiler/common"
 	pb "git.stingr.net/stingray/advfiler/protos"
@@ -123,6 +124,10 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(rsize, 10))
 	if m := result.ModuleType(); m != "" {
 		w.Header().Add("X-Fs-Module-Type", m)
+	}
+	if lm := result.LastModifiedTimestamp(); lm != 0 {
+		t := time.Unix(lm, 0)
+		w.Header().Set("Last-Modified", t.UTC().Format(http.TimeFormat))
 	}
 	if r.Method == http.MethodHead {
 		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
