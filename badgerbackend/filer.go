@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -235,7 +236,14 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 		if err != nil {
 			return nil, err
 		}
-		leafNode = *fi
+		if fi == nil {
+			fkey := makePermKey(cv.Filename)
+			if err = getValue(tx, fkey, &leafNode); err != nil {
+				return nil, err
+			}
+		} else {
+			leafNode = *fi
+		}
 		leafNode.ReferenceCount = 2
 		if err = setValue(tx, checksumKey, &pb.ThisChecksum{
 			Hardlink: inode,
@@ -259,8 +267,10 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 	if err != nil {
 		return nil, err
 	}
-	if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
-		return nil, err
+	if cv.Filename != "" {
+		if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
+			return nil, err
+		}
 	}
 	if err = setValue(tx, inodeKey, &leafNode); err != nil {
 		return nil, err
@@ -278,6 +288,52 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if strings.HasSuffix(info.Name, "/") {
 		return common.UploadStatus{}, errors.New("can't upload to directory")
 	}
+	permKey := makePermKey(info.Name)
+
+	if hdigest := info.RecvDigests["SHA-256"]; hdigest != "" && info.ContentLength != 0 {
+		xdigest, err := base64.StdEncoding.DecodeString(hdigest)
+		if err == nil {
+			checksumKey := makeChecksumKey(xdigest)
+			var hardlinked bool
+			fi := pb.FileInfo64{
+				ModuleType:            info.ModuleType,
+				Size_:                 info.ContentLength,
+				Compression:           pb.CT_SNAPPY,
+				LastModifiedTimestamp: info.TimestampUnix,
+			}
+					err = updateWithRetry(s.db, func(tx *badger.Txn) error {
+				hardlinked = false
+				var cv pb.ThisChecksum
+				err := getValue(tx, checksumKey, &cv)
+				if err != nil && err != badger.ErrKeyNotFound {
+					return err
+				}
+
+				if err == nil {
+					if err := maybeDeletePrevBadger(tx, permKey); err != nil {
+						return err
+					}
+					xvalue, err := s.linkToExistingFile(tx, checksumKey, &cv, &fi)
+					if err != nil {
+						return err
+					}
+					if err := tx.Set(permKey, xvalue); err != nil {
+						return err
+					}
+					hardlinked = true
+				}
+				return nil
+			})
+			if hardlinked {
+				return common.UploadStatus{
+					Digests:    info.RecvDigests,
+					Size:       info.ContentLength,
+					Hardlinked: true,
+				}, nil
+			}
+		}
+	}
+
 	cw := chunkingWriter{
 		f:       s,
 		tempKey: makeTempKey(info.Name),
@@ -325,7 +381,6 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if err != nil {
 		return common.UploadStatus{}, err
 	}
-	permKey := makePermKey(info.Name)
 	var hardlinked bool
 
 	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
