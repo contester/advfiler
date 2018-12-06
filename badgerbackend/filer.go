@@ -301,7 +301,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 				Compression:           pb.CT_SNAPPY,
 				LastModifiedTimestamp: info.TimestampUnix,
 			}
-					err = updateWithRetry(s.db, func(tx *badger.Txn) error {
+			err = updateWithRetry(s.db, func(tx *badger.Txn) error {
 				hardlinked = false
 				var cv pb.ThisChecksum
 				err := getValue(tx, checksumKey, &cv)
