@@ -230,6 +230,7 @@ func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.Th
 	var leafNode pb.FileInfo64
 	var inode uint64
 	var inodeKey []byte
+	log.Infof("link to: %v %v", cv, fi)
 	if cv.Filename != "" {
 		var err error
 		inode, err = s.iseq.Next()
