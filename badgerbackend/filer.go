@@ -76,6 +76,8 @@ func makeInodeKey(id uint64) []byte {
 	return makeUintKey(5, id)
 }
 
+func makeIVKey(id uint64) []byte { return makeUintKey(6, id) }
+
 func makeUintKey(pfx byte, id uint64) []byte {
 	result := make([]byte, binary.MaxVarintLen64+1)
 	result[0] = pfx
@@ -171,32 +173,43 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 		return nil
 	}
 	if prev.Hardlink != 0 {
-		var leafNode pb.FileInfo64
-		leafNodeKey := makeInodeKey(prev.Hardlink)
-		log.Infof("inode key: %d", prev.Hardlink)
-		if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
+		var ivattr pb.InodeVolatileAttributes
+		ivkey := makeIVKey(prev.Hardlink)
+		if err := getValue(tx, ivkey, &ivattr); err != nil {
 			return err
 		}
-		if leafNode.ReferenceCount == 1 {
-			hasher := sha256.New()
-			io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
-			checksumKey := makeChecksumKey(hasher.Sum(nil))
+
+		if ivattr.ReferenceCount == 1 {
+			var leafNode pb.FileInfo64
+			leafNodeKey := makeInodeKey(prev.Hardlink)
+			log.Infof("inode key: %d", prev.Hardlink)
+			if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
+				return err
+			}
+
+			checksum := leafNode.GetDigests().GetSha256()
+			if len(checksum) == 0 {
+				hasher := sha256.New()
+				io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
+				checksum = hasher.Sum(nil)
+			}
+			checksumKey := makeChecksumKey(checksum)
 			prev.Chunks = leafNode.Chunks
 			if err := tx.Delete(leafNodeKey); err != nil {
 				return err
 			}
-			log.Infof("wipe checksum key: %q", checksumKey)
 			if err := tx.Delete(checksumKey); err != nil {
 				return err
 			}
-		} else {
-			leafNode.ReferenceCount--
-			log.Infof("decref: %d", leafNode.ReferenceCount)
-			if err := setValue(tx, leafNodeKey, &leafNode); err != nil {
+			if err := tx.Delete(ivkey); err != nil {
 				return err
 			}
+		} else {
+			ivattr.ReferenceCount--
+			return setValue(tx, ivkey, &ivattr)
 		}
 	}
+
 	return deleteBadgerChunks(tx, prev.Chunks)
 }
 
@@ -226,60 +239,62 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (s *Filer) linkToExistingFileByName(tx *badger.Txn, checksumKey []byte, existingFileName string, newFileInfo *pb.FileInfo64) (uint64, error) {
+	inode, err := s.iseq.Next()
+	if err != nil {
+		return 0, err
+	}
+	existingFileKey := makePermKey(existingFileName)
+	var existingFileInfo pb.FileInfo64
+	if err = getValue(tx, existingFileKey, &existingFileInfo); err != nil {
+		return 0, err
+	}
+	existingFileTimestamp := existingFileInfo.LastModifiedTimestamp
+	inodeKey := makeInodeKey(inode)
+	ivKey := makeIVKey(inode)
+	existingFileInfo.LastModifiedTimestamp = 0
+	if err = setValue(tx, checksumKey, &pb.ThisChecksum{Hardlink: inode}); err != nil {
+		return 0, err
+	}
+	if err = setValue(tx, inodeKey, &existingFileInfo); err != nil {
+		return 0, err
+	}
+	if err = setValue(tx, ivKey, &pb.InodeVolatileAttributes{ReferenceCount: 2}); err != nil {
+		return 0, err
+	}
+	if err = setValue(tx, existingFileKey, &pb.FileInfo64{Hardlink: inode, LastModifiedTimestamp: existingFileTimestamp}); err != nil {
+		return 0, err
+	}
+	return inode, nil
+}
+
 func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.ThisChecksum, fi *pb.FileInfo64) ([]byte, error) {
-	var leafNode pb.FileInfo64
 	var inode uint64
-	var inodeKey []byte
 	log.Infof("link to: %v %v", cv, fi)
 	if cv.Filename != "" {
 		var err error
-		inode, err = s.iseq.Next()
-		if err != nil {
+		if inode, err = s.linkToExistingFileByName(tx, checksumKey, cv.Filename, fi); err != nil {
 			return nil, err
 		}
-		if fi == nil {
-			fkey := makePermKey(cv.Filename)
-			if err = getValue(tx, fkey, &leafNode); err != nil {
-				return nil, err
-			}
-		} else {
-			leafNode = *fi
-		}
-		leafNode.ReferenceCount = 2
-		if err = setValue(tx, checksumKey, &pb.ThisChecksum{
-			Hardlink: inode,
-		}); err != nil {
-			return nil, err
-		}
-		leafNode.LastModifiedTimestamp = 0
-		inodeKey = makeInodeKey(inode)
 	} else {
 		inode = cv.Hardlink
-		inodeKey = makeInodeKey(cv.Hardlink)
-		if err := getValue(tx, inodeKey, &leafNode); err != nil {
-			return nil, maybeWrapKNF(inodeKey, err)
+		var ivAttr pb.InodeVolatileAttributes
+		ivKey := makeIVKey(inode)
+		if err := getValue(tx, ivKey, &ivAttr); err != nil {
+			return nil, err
 		}
-		leafNode.ReferenceCount++
+		ivAttr.ReferenceCount++
+		if err := setValue(tx, ivKey, &ivAttr); err != nil {
+			return nil, err
+		}
 	}
-	xvalue, err := proto.Marshal(&pb.FileInfo64{
+	if err := deleteBadgerChunks(tx, fi.Chunks); err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.FileInfo64{
 		LastModifiedTimestamp: fi.LastModifiedTimestamp,
 		Hardlink:              inode,
 	})
-	if err != nil {
-		return nil, err
-	}
-	if cv.Filename != "" {
-		if err = tx.Set(makePermKey(cv.Filename), xvalue); err != nil {
-			return nil, err
-		}
-	}
-	if err = setValue(tx, inodeKey, &leafNode); err != nil {
-		return nil, err
-	}
-	if err = deleteBadgerChunks(tx, fi.Chunks); err != nil {
-		return nil, err
-	}
-	return xvalue, nil
 }
 
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
