@@ -646,7 +646,7 @@ func (f *Filer) DebugList(w http.ResponseWriter, r *http.Request) {
 	f.db.View(func(tx *badger.Txn) error {
 		iter := tx.NewIterator(opts)
 		defer iter.Close()
-		for ; iter.Valid(); iter.Next() {
+		for it.Rewind(); iter.Valid(); iter.Next() {
 			log.Infof("iter: %q", iter.Item().Key())
 		}
 		return nil
