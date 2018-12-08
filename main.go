@@ -90,11 +90,13 @@ func main() {
 			log.Fatalf("can't open filer db: %v", err)
 		}
 		defer fbdb.Close()
-		filerBackend, err = badgerbackend.NewFiler(fbdb)
+		fb, err := badgerbackend.NewFiler(fbdb)
 		if err != nil {
 			log.Fatalf("can't create badger filer: %v", err)
 		}
-		defer filerBackend.Close()
+		defer fb.Close()
+		http.HandleFunc("/debugList/", fb.DebugList)
+		filerBackend = fb
 		meKV = badgerbackend.NewKV(mbdb, nil)
 	} else {
 		if config.BoltDB == "" {

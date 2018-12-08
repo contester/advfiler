@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -179,7 +180,7 @@ func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
 			return err
 		}
 
-		if ivattr.ReferenceCount == 1 {
+		if ivattr.ReferenceCount <= 1 {
 			var leafNode pb.FileInfo64
 			leafNodeKey := makeInodeKey(prev.Hardlink)
 			log.Infof("inode key: %d", prev.Hardlink)
@@ -637,4 +638,17 @@ func (f *Filer) List(ctx context.Context, path string) ([]string, error) {
 		return nil, err
 	}
 	return res, nil
+}
+
+func (f *Filer) DebugList(w http.ResponseWriter, r *http.Request) {
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
+	f.db.View(func(tx *badger.Txn) error {
+		iter := tx.NewIterator(opts)
+		defer iter.Close()
+		for ; iter.Valid(); iter.Next() {
+			log.Infof("iter: %q", iter.Item().Key())
+		}
+		return nil
+	})
 }
