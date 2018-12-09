@@ -26,15 +26,18 @@ enum CompressionType {
     CT_SNAPPY = 1;
 }
 
-message FileInfo64 {
+message DirectoryEntry {
+    uint64 inode = 1;
+    int64 last_modified_timestamp = 2;
+    string module_type = 3;
+}
+
+message Inode {
     int64 size = 1;
     Digests digests = 2;
-    string module_type = 3;
-    bytes inline_data = 5;
-    repeated uint64 chunks = 6;
-    CompressionType compression = 7;
-    uint64 hardlink = 8;
-    int64 last_modified_timestamp = 10;
+    bytes inline_data = 3;
+    repeated uint64 chunks = 4;
+    CompressionType compression = 5;
 }
 
 message ChunkList {
@@ -42,12 +45,11 @@ message ChunkList {
 }
 
 message ThisChecksum {
-    string filename = 1;
-    uint64 hardlink = 2;
+    uint64 hardlink = 1;
 }
 
 message InodeVolatileAttributes {
-    int64 reference_count = 1;
+    int64 reference_count_minus_1 = 1;
 }
 
 enum AuthAction {

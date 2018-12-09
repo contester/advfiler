@@ -403,7 +403,6 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 
 	fr := tar.NewReader(r.Body)
 	for {
-		icnt++
 		h, err := fr.Next()
 		if err == io.EOF {
 			break
@@ -427,13 +426,14 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		icnt++
 		if res.Hardlinked {
 			savedSize += res.Size
 		} else {
 			realSize += res.Size
 		}
 	}
-	fmt.Fprintf(w, "Real size: %d, saved size: %d\n", realSize, savedSize)
+	fmt.Fprintf(w, "Files: %d, real size: %d, saved size: %d\n", icnt, realSize, savedSize)
 }
 
 func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
@@ -451,6 +451,7 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	log.Infof("wipe: %d files", len(files))
 	for _, v := range files {
 		if v == "" {
 			continue

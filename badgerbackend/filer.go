@@ -69,6 +69,18 @@ func (f *Filer) run() {
 	}
 }
 
+/*
+
+Key prefixes:
+1 - data chunks
+2 - temporary chunk list
+3 - directory entry
+4 - checksum -> inode
+5 - inode
+6 - inode volatile attributes
+
+*/
+
 func makeChunkKey(id uint64) []byte {
 	return makeUintKey(1, id)
 }
@@ -164,56 +176,6 @@ func (s *Filer) deleteTemp(key []byte, chunks []uint64) error {
 	})
 }
 
-func maybeDeletePrevBadger(tx *badger.Txn, key []byte) error {
-	log.Infof("value key: %q", key)
-	var prev pb.FileInfo64
-	if err := getValue(tx, key, &prev); err != nil {
-		if err != badger.ErrKeyNotFound {
-			return err
-		}
-		return nil
-	}
-	if prev.Hardlink != 0 {
-		var ivattr pb.InodeVolatileAttributes
-		ivkey := makeIVKey(prev.Hardlink)
-		if err := getValue(tx, ivkey, &ivattr); err != nil {
-			return err
-		}
-
-		if ivattr.ReferenceCount <= 1 {
-			var leafNode pb.FileInfo64
-			leafNodeKey := makeInodeKey(prev.Hardlink)
-			log.Infof("inode key: %d", prev.Hardlink)
-			if err := getValue(tx, leafNodeKey, &leafNode); err != nil {
-				return err
-			}
-
-			checksum := leafNode.GetDigests().GetSha256()
-			if len(checksum) == 0 {
-				hasher := sha256.New()
-				io.Copy(hasher, snappy.NewReader(bytes.NewReader(leafNode.InlineData)))
-				checksum = hasher.Sum(nil)
-			}
-			checksumKey := makeChecksumKey(checksum)
-			prev.Chunks = leafNode.Chunks
-			if err := tx.Delete(leafNodeKey); err != nil {
-				return err
-			}
-			if err := tx.Delete(checksumKey); err != nil {
-				return err
-			}
-			if err := tx.Delete(ivkey); err != nil {
-				return err
-			}
-		} else {
-			ivattr.ReferenceCount--
-			return setValue(tx, ivkey, &ivattr)
-		}
-	}
-
-	return deleteBadgerChunks(tx, prev.Chunks)
-}
-
 type chunkingWriter struct {
 	f          *Filer
 	tempKey    []byte
@@ -240,62 +202,71 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (s *Filer) linkToExistingFileByName(tx *badger.Txn, checksumKey []byte, existingFileName string, newFileInfo *pb.FileInfo64) (uint64, error) {
-	inode, err := s.iseq.Next()
-	if err != nil {
-		return 0, err
-	}
-	existingFileKey := makePermKey(existingFileName)
-	var existingFileInfo pb.FileInfo64
-	if err = getValue(tx, existingFileKey, &existingFileInfo); err != nil {
-		return 0, err
-	}
-	existingFileTimestamp := existingFileInfo.LastModifiedTimestamp
-	inodeKey := makeInodeKey(inode)
+func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
 	ivKey := makeIVKey(inode)
-	existingFileInfo.LastModifiedTimestamp = 0
-	if err = setValue(tx, checksumKey, &pb.ThisChecksum{Hardlink: inode}); err != nil {
-		return 0, err
+	var ivAttr pb.InodeVolatileAttributes
+	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound { return err }
+	if ivAttr.ReferenceCountMinus_1 == 0 {
+		inodeKey := makeInodeKey(inode)
+		var inodeValue pb.Inode
+		if err := getValue(tx, inodeKey, &inodeValue); err != nil { return err }
+		if len(checksumKey) == 0 {
+			checksum := inodeValue.GetDigests().GetSha256()
+			if len(checksum) == 0 {
+				hasher := sha256.New()
+				io.Copy(hasher, snappy.NewReader(bytes.NewReader(inodeValue.InlineData)))
+				checksum = hasher.Sum(nil)
+			}
+			checksumKey = makeChecksumKey(checksum)
+		}
+		if err := tx.Delete(checksumKey); err != nil { return err }
+		if err := tx.Delete(inodeKey); err != nil { return err }
+		return deleteBadgerChunks(tx, inodeValue.Chunks)
 	}
-	if err = setValue(tx, inodeKey, &existingFileInfo); err != nil {
-		return 0, err
+	ivAttr.ReferenceCountMinus_1--
+	if ivAttr.ReferenceCountMinus_1 == 0 {
+		return tx.Delete(ivKey)
 	}
-	if err = setValue(tx, ivKey, &pb.InodeVolatileAttributes{ReferenceCount: 2}); err != nil {
-		return 0, err
-	}
-	if err = setValue(tx, existingFileKey, &pb.FileInfo64{Hardlink: inode, LastModifiedTimestamp: existingFileTimestamp}); err != nil {
-		return 0, err
-	}
-	return inode, nil
+	return setValue(tx, ivKey, &ivAttr)
 }
 
-func (s *Filer) linkToExistingFile(tx *badger.Txn, checksumKey []byte, cv *pb.ThisChecksum, fi *pb.FileInfo64) ([]byte, error) {
-	var inode uint64
-	log.Infof("link to: %v %v", cv, fi)
-	if cv.Filename != "" {
-		var err error
-		if inode, err = s.linkToExistingFileByName(tx, checksumKey, cv.Filename, fi); err != nil {
-			return nil, err
+func linkInode(tx *badger.Txn, inode uint64) error {
+	ivKey := makeIVKey(inode)
+	var ivAttr pb.InodeVolatileAttributes
+	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound { return err }
+	ivAttr.ReferenceCountMinus_1++
+	return setValue(tx, ivKey, &ivAttr)
+}
+
+// If we have inode with given checksumKey, unlink prev and link next.
+func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.DirectoryEntry) (bool, error) {
+	var cv pb.ThisChecksum
+	found, err := getValueEx(tx, checksumKey, &cv)
+	if !found { return false, err }
+	if prev.Inode != 0 {
+		if prev.Inode == cv.Hardlink {
+			if prev != next {
+				if err := setValue(tx, permKey, &next); err != nil {
+					return false, err
+				}
+			}
+			return true, nil
 		}
-	} else {
-		inode = cv.Hardlink
-		var ivAttr pb.InodeVolatileAttributes
-		ivKey := makeIVKey(inode)
-		if err := getValue(tx, ivKey, &ivAttr); err != nil {
-			return nil, err
-		}
-		ivAttr.ReferenceCount++
-		if err := setValue(tx, ivKey, &ivAttr); err != nil {
-			return nil, err
+		if err := unlinkInode(tx, prev.Inode, nil); err != nil {
+			return false, err
 		}
 	}
-	if err := deleteBadgerChunks(tx, fi.Chunks); err != nil {
-		return nil, err
+
+	// if cv.Hardlink == 0 fail
+
+	if err := linkInode(tx, cv.Hardlink); err != nil {
+		return false, err
 	}
-	return proto.Marshal(&pb.FileInfo64{
-		LastModifiedTimestamp: fi.LastModifiedTimestamp,
-		Hardlink:              inode,
-	})
+	next.Inode = cv.Hardlink
+	if err := setValue(tx, permKey, &next); err != nil {
+			return false, err
+	}
+	return true, nil
 }
 
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
@@ -306,41 +277,25 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, errors.New("can't upload to directory")
 	}
 	permKey := makePermKey(info.Name)
+	dentryValue := pb.DirectoryEntry{
+		LastModifiedTimestamp: info.TimestampUnix,
+		ModuleType:            info.ModuleType,
+	}
+
 
 	if hdigest := info.RecvDigests["SHA-256"]; hdigest != "" && info.ContentLength != 0 {
 		xdigest, err := base64.StdEncoding.DecodeString(hdigest)
 		if err == nil {
 			checksumKey := makeChecksumKey(xdigest)
 			var hardlinked bool
-			fi := pb.FileInfo64{
-				ModuleType:            info.ModuleType,
-				Size_:                 info.ContentLength,
-				Compression:           pb.CT_SNAPPY,
-				LastModifiedTimestamp: info.TimestampUnix,
-			}
 			err = updateWithRetry(s.db, func(tx *badger.Txn) error {
-				hardlinked = false
-				var cv pb.ThisChecksum
-				err := getValue(tx, checksumKey, &cv)
-				if err != nil && err != badger.ErrKeyNotFound {
-					return err
-				}
-
-				if err == nil {
-					if err := maybeDeletePrevBadger(tx, permKey); err != nil {
-						return err
-					}
-					xvalue, err := s.linkToExistingFile(tx, checksumKey, &cv, &fi)
-					if err != nil {
-						return err
-					}
-					if err := tx.Set(permKey, xvalue); err != nil {
-						return err
-					}
-					hardlinked = true
-				}
-				return nil
+				var prev pb.DirectoryEntry
+				if _, err := getValueEx(tx, permKey, &prev); err != nil { return err }
+				var err error
+				hardlinked, err = tryLink(tx, permKey, checksumKey, prev, dentryValue)
+				return err
 			})
+			if err != nil { return common.UploadStatus{}, err}
 			if hardlinked {
 				return common.UploadStatus{
 					Digests:    info.RecvDigests,
@@ -375,62 +330,78 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 
-	fi := pb.FileInfo64{
-		ModuleType:            info.ModuleType,
-		Size_:                 n,
-		InlineData:            cw.inlineData,
-		Chunks:                cw.chunks.Chunks,
-		Compression:           pb.CT_SNAPPY,
-		LastModifiedTimestamp: info.TimestampUnix,
+	inodeValue := pb.Inode{
+		Size_:      n,
+		InlineData: cw.inlineData,
+		Chunks:     cw.chunks.Chunks,
 	}
 
 	stDigests := hashes.Digests()
 	var checksumKey []byte
-	if len(fi.Chunks) != 0 {
-		fi.Digests = stDigests
+	if len(inodeValue.Chunks) != 0 {
+		inodeValue.Digests = stDigests
 	}
 
-	if len(fi.InlineData) != 0 {
+	if n != 0 {
 		checksumKey = makeChecksumKey(stDigests.Sha256)
 	}
 
-	fkValue, err := proto.Marshal(&fi)
-	if err != nil {
-		return common.UploadStatus{}, err
-	}
 	var hardlinked bool
 
 	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
 		hardlinked = false
-		xvalue := fkValue
-		if err := maybeDeletePrevBadger(tx, permKey); err != nil {
-			return err
+		var prev pb.DirectoryEntry
+		_, err := getValueEx(tx, permKey, &prev)
+		if err != nil { return err }
+
+		if inodeValue.Size_ == 0 {
+				if prev.Inode != 0 {
+					if err = unlinkInode(tx, prev.Inode, nil); err != nil {
+						return err
+					}
+				}
+				if prev != dentryValue {
+					if err = setValue(tx, permKey, &dentryValue); err != nil {
+						return err
+					}
+				}
+				return nil
 		}
-		if len(fi.InlineData) > 1 && len(checksumKey) != 0 {
-			var cv pb.ThisChecksum
-			err := getValue(tx, checksumKey, &cv)
-			if err != nil && err != badger.ErrKeyNotFound {
+
+		hardlinked, err = tryLink(tx, permKey, checksumKey, prev, dentryValue)
+		if err != nil { return err }
+
+		if hardlinked {
+			if len(inodeValue.Chunks) != 0 {
+				if err = tx.Delete(cw.tempKey); err != nil {
+					return err
+				}
+				return deleteBadgerChunks(tx, inodeValue.Chunks)
+			}
+			return nil
+		}
+
+		if prev.Inode != 0 {
+			if err := unlinkInode(tx, prev.Inode, nil); err != nil {
 				return err
 			}
-
-			if err == nil {
-				xvalue, err = s.linkToExistingFile(tx, checksumKey, &cv, &fi)
-				if err != nil {
-					return err
-				}
-				hardlinked = true
-			} else {
-				cv.Filename = info.Name
-				dupb, _ := proto.Marshal(&cv)
-				if err = tx.Set(checksumKey, dupb); err != nil {
-					return err
-				}
-			}
 		}
-		if err := tx.Set(permKey, xvalue); err != nil {
+		inode, err := s.iseq.Next()
+		if err != nil {
 			return err
 		}
-		if len(fi.Chunks) != 0 {
+		if err := setValue(tx, makeInodeKey(inode), &inodeValue); err != nil {
+			return err
+		}
+		ld := dentryValue
+		ld.Inode = inode
+		if err := setValue(tx, permKey, &ld); err != nil {
+			return err
+		}
+		if err := setValue(tx, checksumKey, &pb.ThisChecksum{Hardlink: inode}); err != nil {
+			return err
+		}
+		if len(inodeValue.Chunks) != 0 {
 			if err = tx.Delete(cw.tempKey); err != nil {
 				return err
 			}
@@ -459,6 +430,15 @@ func getValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 	})
 }
 
+func getValueEx(tx *badger.Txn, key []byte, msg proto.Message) (bool, error) {
+	switch err := getValue(tx, key, msg); err {
+	case nil: return true, nil
+	case badger.ErrKeyNotFound: return false, nil
+	default:
+		return false, err
+	}
+}
+
 func setValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 	b, err := proto.Marshal(msg)
 	if err != nil {
@@ -468,18 +448,21 @@ func setValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 }
 
 func (f *Filer) Delete(ctx context.Context, path string) error {
-	log.Infof("delete: %q", path)
+	// log.Infof("delete: %q", path)
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
-		if err := maybeDeletePrevBadger(tx, fileKey); err != nil {
-			return err
+		var dentry pb.DirectoryEntry
+		if err := getValue(tx, fileKey, &dentry); err != nil { return err }
+		if dentry.Inode != 0 {
+			if err := unlinkInode(tx, dentry.Inode, nil); err != nil { return err }
 		}
 		return tx.Delete(fileKey)
 	})
 }
 
 type downloadResult struct {
-	fi   pb.FileInfo64
+	dentry pb.DirectoryEntry
+	inode  pb.Inode
 	f    *Filer
 	body io.Reader
 }
@@ -490,12 +473,12 @@ type chunkResultReader struct {
 	chunks []uint64
 }
 
-func (r *downloadResult) Size() int64                  { return r.fi.Size_ }
-func (r *downloadResult) LastModifiedTimestamp() int64 { return r.fi.LastModifiedTimestamp }
-func (r *downloadResult) ModuleType() string           { return r.fi.ModuleType }
-func (r *downloadResult) Digests() *pb.Digests         { return r.fi.Digests }
+func (r *downloadResult) Size() int64                  { return r.inode.Size_ }
+func (r *downloadResult) LastModifiedTimestamp() int64 { return r.dentry.LastModifiedTimestamp }
+func (r *downloadResult) ModuleType() string           { return r.dentry.ModuleType }
+func (r *downloadResult) Digests() *pb.Digests         { return r.inode.Digests }
 func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
-	return r.f.writeChunks(ctx, w, &r.fi, limit)
+	return nil
 }
 func (r *downloadResult) Body() io.Reader {
 	return r.body
@@ -537,65 +520,19 @@ func (f *Filer) readChunk(chunk uint64, data []byte) ([]byte, error) {
 	return data, err
 }
 
-func (f *Filer) writeChunks(ctx context.Context, w io.Writer, fi *pb.FileInfo64, limit int64) error {
-	if fi.Size_ == 0 || limit == 0 {
-		return nil
-	}
-	if len(fi.InlineData) > 0 {
-		var id []byte
-		if limit != -1 && limit < int64(len(fi.InlineData)) {
-			id = fi.InlineData[:limit]
-		} else {
-			id = fi.InlineData
-		}
-		n, err := w.Write(id)
-		if err != nil {
-			return err
-		}
-		if limit != -1 {
-			limit -= int64(n)
-		}
-		if limit == 0 {
-			return nil
-		}
-	}
-	for _, ch := range fi.Chunks {
-		data, err := f.readChunk(ch, nil)
-		if err != nil {
-			return err
-		}
-		if limit != -1 && limit < int64(len(data)) {
-			data = data[:limit]
-		}
-		n, err := w.Write(data)
-		if limit != -1 {
-			limit -= int64(n)
-		}
-		if err != nil {
-			return err
-		}
-		if limit == 0 {
-			return nil
-		}
-	}
-	return nil
-}
-
 func (f *Filer) Download(ctx context.Context, path string, options common.DownloadOptions) (common.DownloadResult, error) {
 	fileKey := makePermKey(path)
 	result := downloadResult{
 		f: f,
 	}
 	if err := f.db.View(func(tx *badger.Txn) error {
-		if err := getValue(tx, fileKey, &result.fi); err != nil {
+		if err := getValue(tx, fileKey, &result.dentry); err != nil {
 			return err
 		}
-		if result.fi.Hardlink != 0 {
-			lms := result.fi.LastModifiedTimestamp
-			if err := getValue(tx, makeInodeKey(result.fi.Hardlink), &result.fi); err != nil {
+		if result.dentry.Inode != 0 {
+			if err := getValue(tx, makeInodeKey(result.dentry.Inode), &result.inode); err != nil {
 				return err
 			}
-			result.fi.LastModifiedTimestamp = lms
 		}
 		return nil
 	}); err != nil {
@@ -604,17 +541,17 @@ func (f *Filer) Download(ctx context.Context, path string, options common.Downlo
 
 	cdr := chunkResultReader{
 		f:      f,
-		buf:    result.fi.InlineData,
-		chunks: result.fi.Chunks,
+		buf:    result.inode.InlineData,
+		chunks: result.inode.Chunks,
 	}
 
 	result.body = snappy.NewReader(&cdr)
 
-	if result.fi.Digests == nil && len(result.fi.InlineData) > 0 {
+	if result.inode.Digests == nil && len(result.inode.InlineData) > 0 {
 		hashes := common.NewHashes()
-		cr := snappy.NewReader(bytes.NewReader(result.fi.InlineData))
+		cr := snappy.NewReader(bytes.NewReader(result.inode.InlineData))
 		if _, err := io.Copy(hashes, cr); err == nil {
-			result.fi.Digests = hashes.Digests()
+			result.inode.Digests = hashes.Digests()
 		}
 	}
 	return &result, nil
@@ -643,11 +580,17 @@ func (f *Filer) List(ctx context.Context, path string) ([]string, error) {
 func (f *Filer) DebugList(w http.ResponseWriter, r *http.Request) {
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = false
+	ctx := r.Context()
 	f.db.View(func(tx *badger.Txn) error {
 		iter := tx.NewIterator(opts)
 		defer iter.Close()
 		for iter.Rewind(); iter.Valid(); iter.Next() {
 			log.Infof("iter: %q", iter.Item().Key())
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 		}
 		return nil
 	})

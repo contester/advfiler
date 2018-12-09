@@ -37,6 +37,7 @@ func badgerOpen(path string) (*badger.DB, error) {
 
 	opt.Dir = filepath.Join(path, "keys")
 	opt.ValueDir = filepath.Join(path, "values")
+	opt.Truncate = true
 
 	if err := os.MkdirAll(opt.Dir, os.ModePerm); err != nil {
 		return nil, err
