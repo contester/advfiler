@@ -55,8 +55,12 @@ func (f *Filer) Close() {
 func (f *Filer) run() {
 	defer close(f.doneChan)
 	defer func() {
-		if f.seq != nil { f.seq.Release() }
-		if f.iseq != nil { f.iseq.Release() }
+		if f.seq != nil {
+			f.seq.Release()
+		}
+		if f.iseq != nil {
+			f.iseq.Release()
+		}
 	}()
 	for {
 		select {
@@ -209,12 +213,16 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
 	ivKey := makeIVKey(inode)
 	var ivAttr pb.InodeVolatileAttributes
-	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound { return err }
+	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound {
+		return err
+	}
 	// log.Infof("decref %d %d", inode, ivAttr.ReferenceCountMinus_1)
 	if ivAttr.ReferenceCountMinus_1 == 0 {
 		inodeKey := makeInodeKey(inode)
 		var inodeValue pb.Inode
-		if err := getValue(tx, inodeKey, &inodeValue); err != nil { return err }
+		if err := getValue(tx, inodeKey, &inodeValue); err != nil {
+			return err
+		}
 		if len(checksumKey) == 0 {
 			checksum := inodeValue.GetDigests().GetSha256()
 			if len(checksum) == 0 {
@@ -224,8 +232,12 @@ func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
 			}
 			checksumKey = makeChecksumKey(checksum)
 		}
-		if err := tx.Delete(checksumKey); err != nil { return err }
-		if err := tx.Delete(inodeKey); err != nil { return err }
+		if err := tx.Delete(checksumKey); err != nil {
+			return err
+		}
+		if err := tx.Delete(inodeKey); err != nil {
+			return err
+		}
 		return deleteBadgerChunks(tx, inodeValue.Chunks)
 	}
 	ivAttr.ReferenceCountMinus_1--
@@ -238,7 +250,9 @@ func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
 func linkInode(tx *badger.Txn, inode uint64) error {
 	ivKey := makeIVKey(inode)
 	var ivAttr pb.InodeVolatileAttributes
-	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound { return err }
+	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound {
+		return err
+	}
 	ivAttr.ReferenceCountMinus_1++
 	// log.Infof("incref: %d %d", inode, ivAttr.ReferenceCountMinus_1)
 	return setValue(tx, ivKey, &ivAttr)
@@ -248,7 +262,9 @@ func linkInode(tx *badger.Txn, inode uint64) error {
 func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.DirectoryEntry) (bool, error) {
 	var cv pb.ThisChecksum
 	found, err := getValueEx(tx, checksumKey, &cv)
-	if !found { return false, err }
+	if !found {
+		return false, err
+	}
 
 	next.Inode = cv.Hardlink
 	if prev.Inode != 0 {
@@ -273,7 +289,7 @@ func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.Director
 	}
 	next.Inode = cv.Hardlink
 	if err := setValue(tx, permKey, &next); err != nil {
-			return false, err
+		return false, err
 	}
 	return true, nil
 }
@@ -291,7 +307,6 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		ModuleType:            info.ModuleType,
 	}
 
-
 	if hdigest := info.RecvDigests["SHA-256"]; hdigest != "" && info.ContentLength != 0 {
 		xdigest, err := base64.StdEncoding.DecodeString(hdigest)
 		if err == nil {
@@ -299,12 +314,16 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 			var hardlinked bool
 			err = updateWithRetry(s.db, func(tx *badger.Txn) error {
 				var prev pb.DirectoryEntry
-				if _, err := getValueEx(tx, permKey, &prev); err != nil { return err }
+				if _, err := getValueEx(tx, permKey, &prev); err != nil {
+					return err
+				}
 				var err error
 				hardlinked, err = tryLink(tx, permKey, checksumKey, prev, dentryValue)
 				return err
 			})
-			if err != nil { return common.UploadStatus{}, err}
+			if err != nil {
+				return common.UploadStatus{}, err
+			}
 			if hardlinked {
 				return common.UploadStatus{
 					Digests:    info.RecvDigests,
@@ -361,24 +380,28 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		hardlinked = false
 		var prev pb.DirectoryEntry
 		_, err := getValueEx(tx, permKey, &prev)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		if inodeValue.Size_ == 0 {
-				if prev.Inode != 0 {
-					if err = unlinkInode(tx, prev.Inode, nil); err != nil {
-						return err
-					}
+			if prev.Inode != 0 {
+				if err = unlinkInode(tx, prev.Inode, nil); err != nil {
+					return err
 				}
-				if prev != dentryValue {
-					if err = setValue(tx, permKey, &dentryValue); err != nil {
-						return err
-					}
+			}
+			if prev != dentryValue {
+				if err = setValue(tx, permKey, &dentryValue); err != nil {
+					return err
 				}
-				return nil
+			}
+			return nil
 		}
 
 		hardlinked, err = tryLink(tx, permKey, checksumKey, prev, dentryValue)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		if hardlinked {
 			if len(inodeValue.Chunks) != 0 {
@@ -441,8 +464,10 @@ func getValue(tx *badger.Txn, key []byte, msg proto.Message) error {
 
 func getValueEx(tx *badger.Txn, key []byte, msg proto.Message) (bool, error) {
 	switch err := getValue(tx, key, msg); err {
-	case nil: return true, nil
-	case badger.ErrKeyNotFound: return false, nil
+	case nil:
+		return true, nil
+	case badger.ErrKeyNotFound:
+		return false, nil
 	default:
 		return false, err
 	}
@@ -461,10 +486,14 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 	fileKey := makePermKey(path)
 	return f.db.Update(func(tx *badger.Txn) error {
 		var dentry pb.DirectoryEntry
-		if err := getValue(tx, fileKey, &dentry); err != nil { return err }
-		log.Infof("delete: %q %d", path, dentry.Inode)
+		if err := getValue(tx, fileKey, &dentry); err != nil {
+			return err
+		}
+		//log.Infof("delete: %q %d", path, dentry.Inode)
 		if dentry.Inode != 0 {
-			if err := unlinkInode(tx, dentry.Inode, nil); err != nil { return err }
+			if err := unlinkInode(tx, dentry.Inode, nil); err != nil {
+				return err
+			}
 		}
 		return tx.Delete(fileKey)
 	})
@@ -473,8 +502,8 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 type downloadResult struct {
 	dentry pb.DirectoryEntry
 	inode  pb.Inode
-	f    *Filer
-	body io.Reader
+	f      *Filer
+	body   io.Reader
 }
 
 type chunkResultReader struct {
