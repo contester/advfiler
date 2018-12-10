@@ -210,7 +210,7 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
+func unlinkInode(tx *badger.Txn, inode uint64) error {
 	ivKey := makeIVKey(inode)
 	var ivAttr pb.InodeVolatileAttributes
 	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound {
@@ -223,15 +223,13 @@ func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
 		if err := getValue(tx, inodeKey, &inodeValue); err != nil {
 			return err
 		}
-		if len(checksumKey) == 0 {
-			checksum := inodeValue.GetDigests().GetSha256()
-			if len(checksum) == 0 {
-				hasher := sha256.New()
-				io.Copy(hasher, snappy.NewReader(bytes.NewReader(inodeValue.InlineData)))
-				checksum = hasher.Sum(nil)
-			}
-			checksumKey = makeChecksumKey(checksum)
+		checksum := inodeValue.GetDigests().GetSha256()
+		if len(checksum) == 0 {
+			hasher := sha256.New()
+			io.Copy(hasher, snappy.NewReader(bytes.NewReader(inodeValue.InlineData)))
+			checksum = hasher.Sum(nil)
 		}
+		checksumKey := makeChecksumKey(checksum)
 		if err := tx.Delete(checksumKey); err != nil {
 			return err
 		}
@@ -277,7 +275,7 @@ func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.Director
 			}
 			return true, nil
 		}
-		if err := unlinkInode(tx, prev.Inode, nil); err != nil {
+		if err := unlinkInode(tx, prev.Inode); err != nil {
 			return false, err
 		}
 	}
@@ -386,7 +384,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 
 		if inodeValue.Size_ == 0 {
 			if prev.Inode != 0 {
-				if err = unlinkInode(tx, prev.Inode, nil); err != nil {
+				if err = unlinkInode(tx, prev.Inode); err != nil {
 					return err
 				}
 			}
@@ -414,7 +412,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		}
 
 		if prev.Inode != 0 {
-			if err := unlinkInode(tx, prev.Inode, nil); err != nil {
+			if err := unlinkInode(tx, prev.Inode); err != nil {
 				return err
 			}
 		}
@@ -491,7 +489,7 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 		}
 		//log.Infof("delete: %q %d", path, dentry.Inode)
 		if dentry.Inode != 0 {
-			if err := unlinkInode(tx, dentry.Inode, nil); err != nil {
+			if err := unlinkInode(tx, dentry.Inode); err != nil {
 				return err
 			}
 		}
