@@ -188,10 +188,12 @@ type chunkingWriter struct {
 	f          *Filer
 	tempKey    []byte
 	inlineData []byte
+	buf bytes.Buffer
 	chunks     pb.ChunkList
 }
 
 func (s *chunkingWriter) Write(b []byte) (int, error) {
+	const chunkSize = 256 * 1024
 	if len(b) == 0 {
 		return 0, nil
 	}
@@ -199,7 +201,11 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 		s.inlineData = append(s.inlineData, b...)
 		return len(b), nil
 	}
-	fid, err := s.f.insertChunk(s.tempKey, s.chunks, b)
+	s.buf.Write(b)
+	if s.buf.Len() < chunkSize {
+		return len(b), nil
+	}
+	fid, err := s.f.insertChunk(s.tempKey, s.chunks, s.buf.Next(chunkSize))
 	if err != nil {
 		if len(s.chunks.Chunks) > 1 {
 			s.f.deleteTemp(s.tempKey, s.chunks.Chunks)
@@ -208,6 +214,21 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	}
 	s.chunks.Chunks = append(s.chunks.Chunks, fid)
 	return len(b), nil
+}
+
+func (s *chunkingWriter) Close() error {
+	if s.buf.Len() == 0 {
+		return nil
+	}
+	fid, err := s.f.insertChunk(s.tempKey, s.chunks, s.buf.Bytes())
+	if err != nil {
+		if len(s.chunks.Chunks) > 1 {
+			s.f.deleteTemp(s.tempKey, s.chunks.Chunks)
+		}
+		return err
+	}
+	s.chunks.Chunks = append(s.chunks.Chunks, fid)
+	return nil
 }
 
 func unlinkInode(tx *badger.Txn, inode uint64) error {
@@ -353,6 +374,10 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		return common.UploadStatus{}, err
 	}
 	if err = xw.Flush(); err != nil {
+		return common.UploadStatus{}, err
+	}
+
+	if err = cw.Close(); err != nil {
 		return common.UploadStatus{}, err
 	}
 
@@ -528,7 +553,8 @@ func (r *chunkResultReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if len(r.buf) == 0 && len(r.chunks) != 0 {
+	// Handle zero-sized chunks.
+	for len(r.buf) == 0 && len(r.chunks) != 0 {
 		var err error
 		r.buf, err = r.f.readChunk(r.chunks[0], nil)
 		if err != nil {
