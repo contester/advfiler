@@ -54,6 +54,10 @@ func (f *Filer) Close() {
 
 func (f *Filer) run() {
 	defer close(f.doneChan)
+	defer func() {
+		if f.seq != nil { f.seq.Release() }
+		if f.iseq != nil { f.iseq.Release() }
+	}()
 	for {
 		select {
 		case <-f.stopChan:
@@ -206,6 +210,7 @@ func unlinkInode(tx *badger.Txn, inode uint64, checksumKey []byte) error {
 	ivKey := makeIVKey(inode)
 	var ivAttr pb.InodeVolatileAttributes
 	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound { return err }
+	log.Infof("decref %d %d", inode, ivAttr.ReferenceCountMinus_1)
 	if ivAttr.ReferenceCountMinus_1 == 0 {
 		inodeKey := makeInodeKey(inode)
 		var inodeValue pb.Inode
@@ -235,6 +240,7 @@ func linkInode(tx *badger.Txn, inode uint64) error {
 	var ivAttr pb.InodeVolatileAttributes
 	if err := getValue(tx, ivKey, &ivAttr); err != nil && err != badger.ErrKeyNotFound { return err }
 	ivAttr.ReferenceCountMinus_1++
+	log.Infof("incref: %d %d", inode, ivAttr.ReferenceCountMinus_1)
 	return setValue(tx, ivKey, &ivAttr)
 }
 
@@ -243,8 +249,11 @@ func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.Director
 	var cv pb.ThisChecksum
 	found, err := getValueEx(tx, checksumKey, &cv)
 	if !found { return false, err }
+
+	next.Inode = cv.Hardlink
 	if prev.Inode != 0 {
 		if prev.Inode == cv.Hardlink {
+			log.Infof("same inode detected, not linking")
 			if prev != next {
 				if err := setValue(tx, permKey, &next); err != nil {
 					return false, err
@@ -453,6 +462,7 @@ func (f *Filer) Delete(ctx context.Context, path string) error {
 	return f.db.Update(func(tx *badger.Txn) error {
 		var dentry pb.DirectoryEntry
 		if err := getValue(tx, fileKey, &dentry); err != nil { return err }
+		log.Infof("delete: %q %d", path, dentry.Inode)
 		if dentry.Inode != 0 {
 			if err := unlinkInode(tx, dentry.Inode, nil); err != nil { return err }
 		}
