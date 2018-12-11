@@ -1,7 +1,6 @@
 package badgerbackend
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -188,7 +187,7 @@ type chunkingWriter struct {
 	f          *Filer
 	tempKey    []byte
 	inlineData []byte
-	buf bytes.Buffer
+	buf        bytes.Buffer
 	chunks     pb.ChunkList
 }
 
@@ -357,9 +356,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		f:       s,
 		tempKey: makeTempKey(info.Name),
 	}
-	xw := bufio.NewWriterSize(&cw, 63*1024)
+	//xw := bufio.NewWriterSize(&cw, 63*1024)
 
-	bw := snappy.NewBufferedWriter(xw)
+	bw := snappy.NewBufferedWriter(&cw)
 	hashes := common.NewHashes()
 	mw := io.MultiWriter(bw, hashes)
 	buf := make([]byte, 48*1024)
@@ -373,9 +372,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if err = bw.Close(); err != nil {
 		return common.UploadStatus{}, err
 	}
-	if err = xw.Flush(); err != nil {
-		return common.UploadStatus{}, err
-	}
+	//if err = xw.Flush(); err != nil {
+	//	return common.UploadStatus{}, err
+	//}
 
 	if err = cw.Close(); err != nil {
 		return common.UploadStatus{}, err
