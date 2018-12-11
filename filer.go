@@ -451,7 +451,6 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	log.Infof("wipe: %d files", len(files))
 	for _, v := range files {
 		if v == "" {
 			continue
@@ -460,5 +459,8 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+	}
+	for _, v := range files {
+		fmt.Fprintln(w, v)
 	}
 }
