@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/dgraph-io/badger"
 	"github.com/coreos/go-systemd/activation"
 	"github.com/wercker/journalhook"
 )
