@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -656,4 +657,19 @@ func (f *Filer) DebugList(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+}
+
+func (f *Filer) DebugGC(w http.ResponseWriter, r *http.Request) {
+	percent := float64(0.5)
+
+	if xv := r.FormValue("percent"); xv != "" {
+		if fv, _ := strconv.ParseFloat(xv, 64); fv != 0 {
+			percent = fv
+		}
+	}
+
+	err := f.db.RunValueLogGC(percent)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+	}
 }

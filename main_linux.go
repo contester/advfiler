@@ -16,3 +16,5 @@ func setupJournalhook() {
 func activationFiles() []*os.File {
 	return activation.Files(true)
 }
+
+func modBadgerOpts(opts *badger.Options) {}

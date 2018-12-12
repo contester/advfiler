@@ -37,7 +37,7 @@ func badgerOpen(path string) (*badger.DB, error) {
 
 	opt.Dir = filepath.Join(path, "keys")
 	opt.ValueDir = filepath.Join(path, "values")
-	opt.Truncate = true
+	modBadgerOpts(&opt)
 
 	if err := os.MkdirAll(opt.Dir, os.ModePerm); err != nil {
 		return nil, err
@@ -97,6 +97,7 @@ func main() {
 		}
 		defer fb.Close()
 		http.HandleFunc("/debugList/", fb.DebugList)
+		http.HandleFunc("/debugGC/", fb.DebugGC)
 		filerBackend = fb
 		meKV = badgerbackend.NewKV(mbdb, nil)
 	} else {
