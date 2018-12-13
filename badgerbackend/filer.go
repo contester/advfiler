@@ -405,7 +405,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	err = updateWithRetry(s.db, func(tx *badger.Txn) error {
 		hardlinked = false
 		var prev pb.DirectoryEntry
-		_, err := getValueEx(tx, permKey, &prev)
+		prevFound, err := getValueEx(tx, permKey, &prev)
 		if err != nil {
 			return err
 		}
@@ -416,7 +416,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 					return err
 				}
 			}
-			if prev != dentryValue {
+			if prev != dentryValue || !prevFound {
 				if err = setValue(tx, permKey, &dentryValue); err != nil {
 					return err
 				}
