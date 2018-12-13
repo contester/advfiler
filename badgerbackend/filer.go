@@ -320,6 +320,9 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if strings.HasSuffix(info.Name, "/") {
 		return common.UploadStatus{}, errors.New("can't upload to directory")
 	}
+	if info.Name == "submit/school.sgu.ru/moodle/319865/351184/3/output.txt" {
+		log.Infof("found it!! %v", info)
+	}
 	permKey := makePermKey(info.Name)
 	dentryValue := pb.DirectoryEntry{
 		LastModifiedTimestamp: info.TimestampUnix,
@@ -466,6 +469,15 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	if err != nil {
 		return common.UploadStatus{}, err
 	}
+
+	if info.Name == "submit/school.sgu.ru/moodle/319865/351184/3/output.txt" {
+		log.Infof("upload status %v", common.UploadStatus{
+			Digests:    common.DigestsToMap(stDigests),
+			Size:       n,
+			Hardlinked: hardlinked,
+		})
+	}
+
 
 	return common.UploadStatus{
 		Digests:    common.DigestsToMap(stDigests),
