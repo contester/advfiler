@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"git.sgu.ru/sgu/systemdutil"
-	"git.stingr.net/stingray/advfiler/common"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
 	"git.stingr.net/stingray/advfiler/boltbackend"
+	"git.stingr.net/stingray/advfiler/common"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/dgraph-io/badger"
 	"github.com/kelseyhightower/envconfig"
@@ -29,7 +29,8 @@ type conf3 struct {
 	WeedBackend      string   `envconfig:"WEED_BACKEND" default:"http://localhost:9333"`
 	ManifestBadgerDB string   `envconfig:"MANIFEST_BDB"`
 	FilerBadgerDB    string   `envconfig:"FILER_BDB"`
-	ValidAuthTokens []string `envconfig:"VALID_AUTH_TOKENS"`
+	ValidAuthTokens  []string `envconfig:"VALID_AUTH_TOKENS"`
+	EnableDebug      bool
 }
 
 func badgerOpen(path string) (*badger.DB, error) {
@@ -96,15 +97,17 @@ func main() {
 			log.Fatalf("can't create badger filer: %v", err)
 		}
 		defer fb.Close()
-		http.HandleFunc("/debugList/", fb.DebugList)
-		http.HandleFunc("/debugGC/", fb.DebugGC)
+		if config.EnableDebug {
+			http.HandleFunc("/debugList/", fb.DebugList)
+			http.HandleFunc("/debugGC/", fb.DebugGC)
+		}
 		filerBackend = fb
 		meKV = badgerbackend.NewKV(mbdb, nil)
 	} else {
 		if config.BoltDB == "" {
 			log.Fatal("BOLT_DB needs to be specified")
 		}
-			db, err := bolt.Open(config.BoltDB, 0600, &bolt.Options{Timeout: 1 * time.Second})
+		db, err := bolt.Open(config.BoltDB, 0600, &bolt.Options{Timeout: 1 * time.Second})
 		if err != nil {
 			log.Fatal(err)
 		}

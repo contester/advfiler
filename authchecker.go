@@ -11,6 +11,9 @@ type AuthChecker struct {
 }
 
 func (s *AuthChecker) Check(ctx context.Context, token string, action pb.AuthAction, path string) (bool, error) {
+	if len(s.validTokens) == 0 {
+		return true, nil
+	}
 	if _, ok := s.validTokens[token]; ok {
 		return true, nil
 	}
