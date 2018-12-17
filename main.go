@@ -31,7 +31,7 @@ type conf3 struct {
 	FilerBadgerDB    string   `envconfig:"FILER_BDB"`
 	ValidAuthTokens  []string `envconfig:"VALID_AUTH_TOKENS"`
 	EnableDebug      bool
-	Journal bool
+	Journal          bool
 }
 
 func badgerOpen(path string) (*badger.DB, error) {
@@ -143,4 +143,5 @@ func main() {
 	}
 	daemon.SdNotify(false, "READY=1")
 	systemdutil.WaitSigint()
+	daemon.SdNotify(false, "STOPPING=1")
 }
