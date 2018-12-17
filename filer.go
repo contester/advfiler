@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -59,7 +60,15 @@ func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *
 		return err
 	}
 	sort.Strings(names)
-	w.Write([]byte(strings.Join(names, "\n")))
+	var buf bytes.Buffer
+
+	for _, v := range names {
+		buf.WriteString(v)
+		buf.WriteByte('\n')
+	}
+
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(buf.Bytes()))
+
 	/*var wr fileList
 	for _, v := range names {
 		wr.Entries = append(wr.Entries, listFileEntry{Name: v})
