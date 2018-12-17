@@ -19,6 +19,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	_ = log.Info
+)
+
 type AuthCheck interface {
 	Check(ctx context.Context, token string, action pb.AuthAction, path string) (bool, error)
 }
@@ -150,9 +154,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		xr = io.LimitReader(xr, limitValue)
 	}
 
-	n, err := io.Copy(w, xr)
-	log.Infof("f: %q rsize: %d n: %d", path, rsize, n)
-
+	_, err = io.Copy(w, xr)
 	return err
 }
 

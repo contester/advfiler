@@ -31,6 +31,7 @@ type conf3 struct {
 	FilerBadgerDB    string   `envconfig:"FILER_BDB"`
 	ValidAuthTokens  []string `envconfig:"VALID_AUTH_TOKENS"`
 	EnableDebug      bool
+	Journal bool
 }
 
 func badgerOpen(path string) (*badger.DB, error) {
@@ -55,18 +56,29 @@ func badgerOpen(path string) (*badger.DB, error) {
 func main() {
 	flag.Parse()
 
-	setupJournalhook()
-	systemdutil.Logger = log.StandardLogger()
-	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) { return true, true }
-	http.Handle("/metrics", prometheus.Handler())
-
-	_, httpSockets, _ := systemdutil.ListenSystemd(activationFiles())
-
 	var config conf3
-
 	if err := envconfig.Process("advfiler", &config); err != nil {
 		log.Fatal(err)
 	}
+
+	var journalHookSet bool
+	if config.Journal {
+		journalHookSet = true
+		setupJournalhook()
+	}
+
+	systemdutil.Logger = log.StandardLogger()
+	actFiles := activationFiles()
+
+	if len(actFiles) > 0 && !journalHookSet {
+		journalHookSet = true
+		setupJournalhook()
+	}
+
+	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) { return true, true }
+	http.Handle("/metrics", prometheus.Handler())
+
+	_, httpSockets, _ := systemdutil.ListenSystemd(actFiles)
 
 	authCheck := AuthChecker{
 		validTokens: make(map[string]struct{}, len(config.ValidAuthTokens)),
