@@ -57,3 +57,13 @@ enum AuthAction {
     A_READ = 1;
     A_WRITE = 2;
 }
+
+message Asset {
+    string name = 1;
+    bool truncated = 2;
+    bytes data = 3;
+}
+
+message Assets {
+    repeated Asset asset = 1;
+}

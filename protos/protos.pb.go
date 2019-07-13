@@ -3,16 +3,9 @@
 
 package protos
 
-import proto "github.com/gogo/protobuf/proto"
+import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-import strconv "strconv"
-
-import bytes "bytes"
-
-import strings "strings"
-import reflect "reflect"
 
 import io "io"
 
@@ -25,13 +18,13 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type CompressionType int32
 
 const (
-	CT_NONE   CompressionType = 0
-	CT_SNAPPY CompressionType = 1
+	CompressionType_CT_NONE   CompressionType = 0
+	CompressionType_CT_SNAPPY CompressionType = 1
 )
 
 var CompressionType_name = map[int32]string{
@@ -43,16 +36,19 @@ var CompressionType_value = map[string]int32{
 	"CT_SNAPPY": 1,
 }
 
+func (x CompressionType) String() string {
+	return proto.EnumName(CompressionType_name, int32(x))
+}
 func (CompressionType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{0}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{0}
 }
 
 type AuthAction int32
 
 const (
-	A_NONE  AuthAction = 0
-	A_READ  AuthAction = 1
-	A_WRITE AuthAction = 2
+	AuthAction_A_NONE  AuthAction = 0
+	AuthAction_A_READ  AuthAction = 1
+	AuthAction_A_WRITE AuthAction = 2
 )
 
 var AuthAction_name = map[int32]string{
@@ -66,20 +62,27 @@ var AuthAction_value = map[string]int32{
 	"A_WRITE": 2,
 }
 
+func (x AuthAction) String() string {
+	return proto.EnumName(AuthAction_name, int32(x))
+}
 func (AuthAction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{1}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{1}
 }
 
 type FileChunk struct {
-	Fid     string `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
-	Sha1Sum []byte `protobuf:"bytes,2,opt,name=sha1sum,proto3" json:"sha1sum,omitempty"`
-	Size_   int64  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	Fid                  string   `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
+	Sha1Sum              []byte   `protobuf:"bytes,2,opt,name=sha1sum,proto3" json:"sha1sum,omitempty"`
+	Size_                int64    `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *FileChunk) Reset()      { *m = FileChunk{} }
-func (*FileChunk) ProtoMessage() {}
+func (m *FileChunk) Reset()         { *m = FileChunk{} }
+func (m *FileChunk) String() string { return proto.CompactTextString(m) }
+func (*FileChunk) ProtoMessage()    {}
 func (*FileChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{0}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{0}
 }
 func (m *FileChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -130,15 +133,19 @@ func (m *FileChunk) GetSize_() int64 {
 }
 
 type Digests struct {
-	Sha1   []byte `protobuf:"bytes,1,opt,name=sha1,proto3" json:"sha1,omitempty"`
-	Md5    []byte `protobuf:"bytes,2,opt,name=md5,proto3" json:"md5,omitempty"`
-	Sha256 []byte `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Sha1                 []byte   `protobuf:"bytes,1,opt,name=sha1,proto3" json:"sha1,omitempty"`
+	Md5                  []byte   `protobuf:"bytes,2,opt,name=md5,proto3" json:"md5,omitempty"`
+	Sha256               []byte   `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Digests) Reset()      { *m = Digests{} }
-func (*Digests) ProtoMessage() {}
+func (m *Digests) Reset()         { *m = Digests{} }
+func (m *Digests) String() string { return proto.CompactTextString(m) }
+func (*Digests) ProtoMessage()    {}
 func (*Digests) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{1}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{1}
 }
 func (m *Digests) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -189,16 +196,20 @@ func (m *Digests) GetSha256() []byte {
 }
 
 type FileInfo struct {
-	Size_      int64        `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Digests    *Digests     `protobuf:"bytes,2,opt,name=digests" json:"digests,omitempty"`
-	ModuleType string       `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
-	Chunks     []*FileChunk `protobuf:"bytes,4,rep,name=chunks" json:"chunks,omitempty"`
+	Size_                int64        `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Digests              *Digests     `protobuf:"bytes,2,opt,name=digests,proto3" json:"digests,omitempty"`
+	ModuleType           string       `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
+	Chunks               []*FileChunk `protobuf:"bytes,4,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *FileInfo) Reset()      { *m = FileInfo{} }
-func (*FileInfo) ProtoMessage() {}
+func (m *FileInfo) Reset()         { *m = FileInfo{} }
+func (m *FileInfo) String() string { return proto.CompactTextString(m) }
+func (*FileInfo) ProtoMessage()    {}
 func (*FileInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{2}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{2}
 }
 func (m *FileInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -256,15 +267,19 @@ func (m *FileInfo) GetChunks() []*FileChunk {
 }
 
 type DirectoryEntry struct {
-	Inode                 uint64 `protobuf:"varint,1,opt,name=inode,proto3" json:"inode,omitempty"`
-	LastModifiedTimestamp int64  `protobuf:"varint,2,opt,name=last_modified_timestamp,json=lastModifiedTimestamp,proto3" json:"last_modified_timestamp,omitempty"`
-	ModuleType            string `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
+	Inode                 uint64   `protobuf:"varint,1,opt,name=inode,proto3" json:"inode,omitempty"`
+	LastModifiedTimestamp int64    `protobuf:"varint,2,opt,name=last_modified_timestamp,json=lastModifiedTimestamp,proto3" json:"last_modified_timestamp,omitempty"`
+	ModuleType            string   `protobuf:"bytes,3,opt,name=module_type,json=moduleType,proto3" json:"module_type,omitempty"`
+	XXX_NoUnkeyedLiteral  struct{} `json:"-"`
+	XXX_unrecognized      []byte   `json:"-"`
+	XXX_sizecache         int32    `json:"-"`
 }
 
-func (m *DirectoryEntry) Reset()      { *m = DirectoryEntry{} }
-func (*DirectoryEntry) ProtoMessage() {}
+func (m *DirectoryEntry) Reset()         { *m = DirectoryEntry{} }
+func (m *DirectoryEntry) String() string { return proto.CompactTextString(m) }
+func (*DirectoryEntry) ProtoMessage()    {}
 func (*DirectoryEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{3}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{3}
 }
 func (m *DirectoryEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -315,17 +330,21 @@ func (m *DirectoryEntry) GetModuleType() string {
 }
 
 type Inode struct {
-	Size_       int64           `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Digests     *Digests        `protobuf:"bytes,2,opt,name=digests" json:"digests,omitempty"`
-	InlineData  []byte          `protobuf:"bytes,3,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
-	Chunks      []uint64        `protobuf:"varint,4,rep,packed,name=chunks" json:"chunks,omitempty"`
-	Compression CompressionType `protobuf:"varint,5,opt,name=compression,proto3,enum=protos.CompressionType" json:"compression,omitempty"`
+	Size_                int64           `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Digests              *Digests        `protobuf:"bytes,2,opt,name=digests,proto3" json:"digests,omitempty"`
+	InlineData           []byte          `protobuf:"bytes,3,opt,name=inline_data,json=inlineData,proto3" json:"inline_data,omitempty"`
+	Chunks               []uint64        `protobuf:"varint,4,rep,packed,name=chunks,proto3" json:"chunks,omitempty"`
+	Compression          CompressionType `protobuf:"varint,5,opt,name=compression,proto3,enum=protos.CompressionType" json:"compression,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
+	XXX_unrecognized     []byte          `json:"-"`
+	XXX_sizecache        int32           `json:"-"`
 }
 
-func (m *Inode) Reset()      { *m = Inode{} }
-func (*Inode) ProtoMessage() {}
+func (m *Inode) Reset()         { *m = Inode{} }
+func (m *Inode) String() string { return proto.CompactTextString(m) }
+func (*Inode) ProtoMessage()    {}
 func (*Inode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{4}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{4}
 }
 func (m *Inode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -386,17 +405,21 @@ func (m *Inode) GetCompression() CompressionType {
 	if m != nil {
 		return m.Compression
 	}
-	return CT_NONE
+	return CompressionType_CT_NONE
 }
 
 type ChunkList struct {
-	Chunks []uint64 `protobuf:"varint,1,rep,packed,name=chunks" json:"chunks,omitempty"`
+	Chunks               []uint64 `protobuf:"varint,1,rep,packed,name=chunks,proto3" json:"chunks,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ChunkList) Reset()      { *m = ChunkList{} }
-func (*ChunkList) ProtoMessage() {}
+func (m *ChunkList) Reset()         { *m = ChunkList{} }
+func (m *ChunkList) String() string { return proto.CompactTextString(m) }
+func (*ChunkList) ProtoMessage()    {}
 func (*ChunkList) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{5}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{5}
 }
 func (m *ChunkList) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -433,13 +456,17 @@ func (m *ChunkList) GetChunks() []uint64 {
 }
 
 type ThisChecksum struct {
-	Hardlink uint64 `protobuf:"varint,1,opt,name=hardlink,proto3" json:"hardlink,omitempty"`
+	Hardlink             uint64   `protobuf:"varint,1,opt,name=hardlink,proto3" json:"hardlink,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ThisChecksum) Reset()      { *m = ThisChecksum{} }
-func (*ThisChecksum) ProtoMessage() {}
+func (m *ThisChecksum) Reset()         { *m = ThisChecksum{} }
+func (m *ThisChecksum) String() string { return proto.CompactTextString(m) }
+func (*ThisChecksum) ProtoMessage()    {}
 func (*ThisChecksum) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{6}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{6}
 }
 func (m *ThisChecksum) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -476,13 +503,17 @@ func (m *ThisChecksum) GetHardlink() uint64 {
 }
 
 type InodeVolatileAttributes struct {
-	ReferenceCountMinus_1 int64 `protobuf:"varint,1,opt,name=reference_count_minus_1,json=referenceCountMinus1,proto3" json:"reference_count_minus_1,omitempty"`
+	ReferenceCountMinus_1 int64    `protobuf:"varint,1,opt,name=reference_count_minus_1,json=referenceCountMinus1,proto3" json:"reference_count_minus_1,omitempty"`
+	XXX_NoUnkeyedLiteral  struct{} `json:"-"`
+	XXX_unrecognized      []byte   `json:"-"`
+	XXX_sizecache         int32    `json:"-"`
 }
 
-func (m *InodeVolatileAttributes) Reset()      { *m = InodeVolatileAttributes{} }
-func (*InodeVolatileAttributes) ProtoMessage() {}
+func (m *InodeVolatileAttributes) Reset()         { *m = InodeVolatileAttributes{} }
+func (m *InodeVolatileAttributes) String() string { return proto.CompactTextString(m) }
+func (*InodeVolatileAttributes) ProtoMessage()    {}
 func (*InodeVolatileAttributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protos_4f4b0e638544eaff, []int{7}
+	return fileDescriptor_protos_8d36219dfeb56805, []int{7}
 }
 func (m *InodeVolatileAttributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -518,6 +549,116 @@ func (m *InodeVolatileAttributes) GetReferenceCountMinus_1() int64 {
 	return 0
 }
 
+type Asset struct {
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Truncated            bool     `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Data                 []byte   `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *Asset) Reset()         { *m = Asset{} }
+func (m *Asset) String() string { return proto.CompactTextString(m) }
+func (*Asset) ProtoMessage()    {}
+func (*Asset) Descriptor() ([]byte, []int) {
+	return fileDescriptor_protos_8d36219dfeb56805, []int{8}
+}
+func (m *Asset) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Asset) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Asset.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *Asset) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Asset.Merge(dst, src)
+}
+func (m *Asset) XXX_Size() int {
+	return m.Size()
+}
+func (m *Asset) XXX_DiscardUnknown() {
+	xxx_messageInfo_Asset.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Asset proto.InternalMessageInfo
+
+func (m *Asset) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Asset) GetTruncated() bool {
+	if m != nil {
+		return m.Truncated
+	}
+	return false
+}
+
+func (m *Asset) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+type Assets struct {
+	Asset                []*Asset `protobuf:"bytes,1,rep,name=asset,proto3" json:"asset,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *Assets) Reset()         { *m = Assets{} }
+func (m *Assets) String() string { return proto.CompactTextString(m) }
+func (*Assets) ProtoMessage()    {}
+func (*Assets) Descriptor() ([]byte, []int) {
+	return fileDescriptor_protos_8d36219dfeb56805, []int{9}
+}
+func (m *Assets) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Assets) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Assets.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *Assets) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Assets.Merge(dst, src)
+}
+func (m *Assets) XXX_Size() int {
+	return m.Size()
+}
+func (m *Assets) XXX_DiscardUnknown() {
+	xxx_messageInfo_Assets.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Assets proto.InternalMessageInfo
+
+func (m *Assets) GetAsset() []*Asset {
+	if m != nil {
+		return m.Asset
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*FileChunk)(nil), "protos.FileChunk")
 	proto.RegisterType((*Digests)(nil), "protos.Digests")
@@ -527,375 +668,10 @@ func init() {
 	proto.RegisterType((*ChunkList)(nil), "protos.ChunkList")
 	proto.RegisterType((*ThisChecksum)(nil), "protos.ThisChecksum")
 	proto.RegisterType((*InodeVolatileAttributes)(nil), "protos.InodeVolatileAttributes")
+	proto.RegisterType((*Asset)(nil), "protos.Asset")
+	proto.RegisterType((*Assets)(nil), "protos.Assets")
 	proto.RegisterEnum("protos.CompressionType", CompressionType_name, CompressionType_value)
 	proto.RegisterEnum("protos.AuthAction", AuthAction_name, AuthAction_value)
-}
-func (x CompressionType) String() string {
-	s, ok := CompressionType_name[int32(x)]
-	if ok {
-		return s
-	}
-	return strconv.Itoa(int(x))
-}
-func (x AuthAction) String() string {
-	s, ok := AuthAction_name[int32(x)]
-	if ok {
-		return s
-	}
-	return strconv.Itoa(int(x))
-}
-func (this *FileChunk) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*FileChunk)
-	if !ok {
-		that2, ok := that.(FileChunk)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.Fid != that1.Fid {
-		return false
-	}
-	if !bytes.Equal(this.Sha1Sum, that1.Sha1Sum) {
-		return false
-	}
-	if this.Size_ != that1.Size_ {
-		return false
-	}
-	return true
-}
-func (this *Digests) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*Digests)
-	if !ok {
-		that2, ok := that.(Digests)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !bytes.Equal(this.Sha1, that1.Sha1) {
-		return false
-	}
-	if !bytes.Equal(this.Md5, that1.Md5) {
-		return false
-	}
-	if !bytes.Equal(this.Sha256, that1.Sha256) {
-		return false
-	}
-	return true
-}
-func (this *FileInfo) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*FileInfo)
-	if !ok {
-		that2, ok := that.(FileInfo)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.Size_ != that1.Size_ {
-		return false
-	}
-	if !this.Digests.Equal(that1.Digests) {
-		return false
-	}
-	if this.ModuleType != that1.ModuleType {
-		return false
-	}
-	if len(this.Chunks) != len(that1.Chunks) {
-		return false
-	}
-	for i := range this.Chunks {
-		if !this.Chunks[i].Equal(that1.Chunks[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *DirectoryEntry) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*DirectoryEntry)
-	if !ok {
-		that2, ok := that.(DirectoryEntry)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.Inode != that1.Inode {
-		return false
-	}
-	if this.LastModifiedTimestamp != that1.LastModifiedTimestamp {
-		return false
-	}
-	if this.ModuleType != that1.ModuleType {
-		return false
-	}
-	return true
-}
-func (this *Inode) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*Inode)
-	if !ok {
-		that2, ok := that.(Inode)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.Size_ != that1.Size_ {
-		return false
-	}
-	if !this.Digests.Equal(that1.Digests) {
-		return false
-	}
-	if !bytes.Equal(this.InlineData, that1.InlineData) {
-		return false
-	}
-	if len(this.Chunks) != len(that1.Chunks) {
-		return false
-	}
-	for i := range this.Chunks {
-		if this.Chunks[i] != that1.Chunks[i] {
-			return false
-		}
-	}
-	if this.Compression != that1.Compression {
-		return false
-	}
-	return true
-}
-func (this *ChunkList) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ChunkList)
-	if !ok {
-		that2, ok := that.(ChunkList)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.Chunks) != len(that1.Chunks) {
-		return false
-	}
-	for i := range this.Chunks {
-		if this.Chunks[i] != that1.Chunks[i] {
-			return false
-		}
-	}
-	return true
-}
-func (this *ThisChecksum) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ThisChecksum)
-	if !ok {
-		that2, ok := that.(ThisChecksum)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.Hardlink != that1.Hardlink {
-		return false
-	}
-	return true
-}
-func (this *InodeVolatileAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*InodeVolatileAttributes)
-	if !ok {
-		that2, ok := that.(InodeVolatileAttributes)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.ReferenceCountMinus_1 != that1.ReferenceCountMinus_1 {
-		return false
-	}
-	return true
-}
-func (this *FileChunk) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 7)
-	s = append(s, "&protos.FileChunk{")
-	s = append(s, "Fid: "+fmt.Sprintf("%#v", this.Fid)+",\n")
-	s = append(s, "Sha1Sum: "+fmt.Sprintf("%#v", this.Sha1Sum)+",\n")
-	s = append(s, "Size_: "+fmt.Sprintf("%#v", this.Size_)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Digests) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 7)
-	s = append(s, "&protos.Digests{")
-	s = append(s, "Sha1: "+fmt.Sprintf("%#v", this.Sha1)+",\n")
-	s = append(s, "Md5: "+fmt.Sprintf("%#v", this.Md5)+",\n")
-	s = append(s, "Sha256: "+fmt.Sprintf("%#v", this.Sha256)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *FileInfo) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&protos.FileInfo{")
-	s = append(s, "Size_: "+fmt.Sprintf("%#v", this.Size_)+",\n")
-	if this.Digests != nil {
-		s = append(s, "Digests: "+fmt.Sprintf("%#v", this.Digests)+",\n")
-	}
-	s = append(s, "ModuleType: "+fmt.Sprintf("%#v", this.ModuleType)+",\n")
-	if this.Chunks != nil {
-		s = append(s, "Chunks: "+fmt.Sprintf("%#v", this.Chunks)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *DirectoryEntry) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 7)
-	s = append(s, "&protos.DirectoryEntry{")
-	s = append(s, "Inode: "+fmt.Sprintf("%#v", this.Inode)+",\n")
-	s = append(s, "LastModifiedTimestamp: "+fmt.Sprintf("%#v", this.LastModifiedTimestamp)+",\n")
-	s = append(s, "ModuleType: "+fmt.Sprintf("%#v", this.ModuleType)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Inode) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 9)
-	s = append(s, "&protos.Inode{")
-	s = append(s, "Size_: "+fmt.Sprintf("%#v", this.Size_)+",\n")
-	if this.Digests != nil {
-		s = append(s, "Digests: "+fmt.Sprintf("%#v", this.Digests)+",\n")
-	}
-	s = append(s, "InlineData: "+fmt.Sprintf("%#v", this.InlineData)+",\n")
-	s = append(s, "Chunks: "+fmt.Sprintf("%#v", this.Chunks)+",\n")
-	s = append(s, "Compression: "+fmt.Sprintf("%#v", this.Compression)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ChunkList) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&protos.ChunkList{")
-	s = append(s, "Chunks: "+fmt.Sprintf("%#v", this.Chunks)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ThisChecksum) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&protos.ThisChecksum{")
-	s = append(s, "Hardlink: "+fmt.Sprintf("%#v", this.Hardlink)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *InodeVolatileAttributes) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&protos.InodeVolatileAttributes{")
-	s = append(s, "ReferenceCountMinus_1: "+fmt.Sprintf("%#v", this.ReferenceCountMinus_1)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func valueToGoStringProtos(v interface{}, typ string) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
 func (m *FileChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -928,6 +704,9 @@ func (m *FileChunk) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x18
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(m.Size_))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -964,6 +743,9 @@ func (m *Digests) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(len(m.Sha256)))
 		i += copy(dAtA[i:], m.Sha256)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1016,6 +798,9 @@ func (m *FileInfo) MarshalTo(dAtA []byte) (int, error) {
 			i += n
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -1049,6 +834,9 @@ func (m *DirectoryEntry) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(len(m.ModuleType)))
 		i += copy(dAtA[i:], m.ModuleType)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1111,6 +899,9 @@ func (m *Inode) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(m.Compression))
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -1146,6 +937,9 @@ func (m *ChunkList) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintProtos(dAtA, i, uint64(j5))
 		i += copy(dAtA[i:], dAtA6[:j5])
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -1169,6 +963,9 @@ func (m *ThisChecksum) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(m.Hardlink))
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -1191,6 +988,85 @@ func (m *InodeVolatileAttributes) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x8
 		i++
 		i = encodeVarintProtos(dAtA, i, uint64(m.ReferenceCountMinus_1))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Asset) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Asset) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Name) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintProtos(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
+	}
+	if m.Truncated {
+		dAtA[i] = 0x10
+		i++
+		if m.Truncated {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if len(m.Data) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintProtos(dAtA, i, uint64(len(m.Data)))
+		i += copy(dAtA[i:], m.Data)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Assets) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Assets) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Asset) > 0 {
+		for _, msg := range m.Asset {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintProtos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -1221,6 +1097,9 @@ func (m *FileChunk) Size() (n int) {
 	if m.Size_ != 0 {
 		n += 1 + sovProtos(uint64(m.Size_))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1241,6 +1120,9 @@ func (m *Digests) Size() (n int) {
 	l = len(m.Sha256)
 	if l > 0 {
 		n += 1 + l + sovProtos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1268,6 +1150,9 @@ func (m *FileInfo) Size() (n int) {
 			n += 1 + l + sovProtos(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1286,6 +1171,9 @@ func (m *DirectoryEntry) Size() (n int) {
 	l = len(m.ModuleType)
 	if l > 0 {
 		n += 1 + l + sovProtos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1317,6 +1205,9 @@ func (m *Inode) Size() (n int) {
 	if m.Compression != 0 {
 		n += 1 + sovProtos(uint64(m.Compression))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1333,6 +1224,9 @@ func (m *ChunkList) Size() (n int) {
 		}
 		n += 1 + sovProtos(uint64(l)) + l
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1345,6 +1239,9 @@ func (m *ThisChecksum) Size() (n int) {
 	if m.Hardlink != 0 {
 		n += 1 + sovProtos(uint64(m.Hardlink))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1356,6 +1253,50 @@ func (m *InodeVolatileAttributes) Size() (n int) {
 	_ = l
 	if m.ReferenceCountMinus_1 != 0 {
 		n += 1 + sovProtos(uint64(m.ReferenceCountMinus_1))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Asset) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovProtos(uint64(l))
+	}
+	if m.Truncated {
+		n += 2
+	}
+	l = len(m.Data)
+	if l > 0 {
+		n += 1 + l + sovProtos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Assets) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Asset) > 0 {
+		for _, e := range m.Asset {
+			l = e.Size()
+			n += 1 + l + sovProtos(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1372,107 +1313,6 @@ func sovProtos(x uint64) (n int) {
 }
 func sozProtos(x uint64) (n int) {
 	return sovProtos(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (this *FileChunk) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&FileChunk{`,
-		`Fid:` + fmt.Sprintf("%v", this.Fid) + `,`,
-		`Sha1Sum:` + fmt.Sprintf("%v", this.Sha1Sum) + `,`,
-		`Size_:` + fmt.Sprintf("%v", this.Size_) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Digests) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Digests{`,
-		`Sha1:` + fmt.Sprintf("%v", this.Sha1) + `,`,
-		`Md5:` + fmt.Sprintf("%v", this.Md5) + `,`,
-		`Sha256:` + fmt.Sprintf("%v", this.Sha256) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *FileInfo) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&FileInfo{`,
-		`Size_:` + fmt.Sprintf("%v", this.Size_) + `,`,
-		`Digests:` + strings.Replace(fmt.Sprintf("%v", this.Digests), "Digests", "Digests", 1) + `,`,
-		`ModuleType:` + fmt.Sprintf("%v", this.ModuleType) + `,`,
-		`Chunks:` + strings.Replace(fmt.Sprintf("%v", this.Chunks), "FileChunk", "FileChunk", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *DirectoryEntry) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&DirectoryEntry{`,
-		`Inode:` + fmt.Sprintf("%v", this.Inode) + `,`,
-		`LastModifiedTimestamp:` + fmt.Sprintf("%v", this.LastModifiedTimestamp) + `,`,
-		`ModuleType:` + fmt.Sprintf("%v", this.ModuleType) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Inode) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Inode{`,
-		`Size_:` + fmt.Sprintf("%v", this.Size_) + `,`,
-		`Digests:` + strings.Replace(fmt.Sprintf("%v", this.Digests), "Digests", "Digests", 1) + `,`,
-		`InlineData:` + fmt.Sprintf("%v", this.InlineData) + `,`,
-		`Chunks:` + fmt.Sprintf("%v", this.Chunks) + `,`,
-		`Compression:` + fmt.Sprintf("%v", this.Compression) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ChunkList) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ChunkList{`,
-		`Chunks:` + fmt.Sprintf("%v", this.Chunks) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ThisChecksum) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ThisChecksum{`,
-		`Hardlink:` + fmt.Sprintf("%v", this.Hardlink) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *InodeVolatileAttributes) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&InodeVolatileAttributes{`,
-		`ReferenceCountMinus_1:` + fmt.Sprintf("%v", this.ReferenceCountMinus_1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func valueToStringProtos(v interface{}) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("*%v", pv)
 }
 func (m *FileChunk) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1594,6 +1434,7 @@ func (m *FileChunk) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1737,6 +1578,7 @@ func (m *Digests) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1899,6 +1741,7 @@ func (m *FileInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2016,6 +1859,7 @@ func (m *DirectoryEntry) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2241,6 +2085,7 @@ func (m *Inode) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2364,6 +2209,7 @@ func (m *ChunkList) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2433,6 +2279,7 @@ func (m *ThisChecksum) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2502,6 +2349,220 @@ func (m *InodeVolatileAttributes) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Asset) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Asset: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Asset: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthProtos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Truncated", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Truncated = bool(v != 0)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthProtos
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
+			if m.Data == nil {
+				m.Data = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProtos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProtos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Assets) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProtos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Assets: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Assets: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Asset", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProtos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProtos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Asset = append(m.Asset, &Asset{})
+			if err := m.Asset[len(m.Asset)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProtos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProtos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2616,45 +2677,46 @@ var (
 	ErrIntOverflowProtos   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("protos.proto", fileDescriptor_protos_4f4b0e638544eaff) }
+func init() { proto.RegisterFile("protos.proto", fileDescriptor_protos_8d36219dfeb56805) }
 
-var fileDescriptor_protos_4f4b0e638544eaff = []byte{
-	// 584 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x93, 0xcf, 0x6e, 0xd3, 0x4c,
-	0x14, 0xc5, 0x3d, 0x4d, 0x9a, 0x34, 0x37, 0xf9, 0xda, 0x7c, 0xa3, 0x42, 0x22, 0x16, 0x43, 0x64,
-	0x36, 0xa1, 0x12, 0x95, 0x12, 0x68, 0x25, 0x96, 0x26, 0x09, 0xa8, 0x82, 0x96, 0x6a, 0xb0, 0x40,
-	0xac, 0x2c, 0xd7, 0x9e, 0xe0, 0x51, 0xfd, 0x27, 0xf2, 0x8c, 0x17, 0x61, 0x03, 0x8f, 0xc0, 0x86,
-	0x77, 0xe0, 0x19, 0x78, 0x02, 0x96, 0x5d, 0x76, 0x49, 0xdd, 0x0d, 0xcb, 0x3e, 0x02, 0x9a, 0xb1,
-	0x9d, 0x46, 0x6c, 0x58, 0xb0, 0xf2, 0xbd, 0x73, 0x46, 0xbf, 0x7b, 0xee, 0xb1, 0x0d, 0x9d, 0x45,
-	0x9a, 0xc8, 0x44, 0xec, 0xeb, 0x07, 0x6e, 0x14, 0x9d, 0xf9, 0x12, 0x5a, 0xcf, 0x79, 0xc8, 0x26,
-	0x41, 0x16, 0x9f, 0xe3, 0x2e, 0xd4, 0xe6, 0xdc, 0xef, 0xa3, 0x01, 0x1a, 0xb6, 0xa8, 0x2a, 0x71,
-	0x1f, 0x9a, 0x22, 0x70, 0x47, 0x22, 0x8b, 0xfa, 0x1b, 0x03, 0x34, 0xec, 0xd0, 0xaa, 0xc5, 0x18,
-	0xea, 0x82, 0x7f, 0x64, 0xfd, 0xda, 0x00, 0x0d, 0x6b, 0x54, 0xd7, 0xe6, 0x0b, 0x68, 0x4e, 0xf9,
-	0x07, 0x26, 0xa4, 0xd0, 0x72, 0xe0, 0x8e, 0x34, 0xab, 0x43, 0x75, 0xad, 0xf0, 0x91, 0x7f, 0x50,
-	0x82, 0x54, 0x89, 0xef, 0x42, 0x43, 0x04, 0xee, 0xf8, 0xe0, 0x50, 0x63, 0x3a, 0xb4, 0xec, 0xcc,
-	0xaf, 0x08, 0xb6, 0x94, 0xad, 0xa3, 0x78, 0x9e, 0xac, 0x26, 0xa1, 0xdb, 0x49, 0xf8, 0x21, 0x34,
-	0xfd, 0x62, 0x92, 0xc6, 0xb5, 0xc7, 0x3b, 0xfb, 0xe5, 0x7a, 0xa5, 0x01, 0x5a, 0xe9, 0xf8, 0x3e,
-	0xb4, 0xa3, 0xc4, 0xcf, 0x42, 0xe6, 0xc8, 0xe5, 0xa2, 0xf0, 0xdb, 0xa2, 0x50, 0x1c, 0xd9, 0xcb,
-	0x85, 0x62, 0x35, 0x3c, 0xb5, 0xbe, 0xe8, 0xd7, 0x07, 0xb5, 0x61, 0x7b, 0xfc, 0x7f, 0x85, 0x5a,
-	0x05, 0x43, 0xcb, 0x0b, 0xe6, 0x27, 0xd8, 0x9e, 0xf2, 0x94, 0x79, 0x32, 0x49, 0x97, 0xb3, 0x58,
-	0xa6, 0x4b, 0xbc, 0x0b, 0x9b, 0x3c, 0x4e, 0xfc, 0xc2, 0x5d, 0x9d, 0x16, 0x0d, 0x3e, 0x84, 0x5e,
-	0xe8, 0x0a, 0xe9, 0x44, 0x89, 0xcf, 0xe7, 0x9c, 0xf9, 0x8e, 0xe4, 0x11, 0x13, 0xd2, 0x8d, 0x16,
-	0xda, 0x6e, 0x8d, 0xde, 0x51, 0xf2, 0x71, 0xa9, 0xda, 0x95, 0xf8, 0x57, 0xaf, 0xe6, 0x77, 0x04,
-	0x9b, 0x47, 0x7a, 0xc4, 0xbf, 0xa7, 0xc2, 0xe3, 0x90, 0xc7, 0xcc, 0xf1, 0x5d, 0xe9, 0x96, 0xf1,
-	0x43, 0x71, 0x34, 0x75, 0xa5, 0xab, 0x5e, 0xcd, 0x5a, 0x2a, 0xf5, 0x2a, 0x02, 0xfc, 0x14, 0xda,
-	0x5e, 0x12, 0x2d, 0x52, 0x26, 0x04, 0x4f, 0xe2, 0xfe, 0xe6, 0x00, 0x0d, 0xb7, 0xc7, 0xbd, 0x6a,
-	0xce, 0xe4, 0x56, 0x52, 0x7e, 0xe9, 0xfa, 0x5d, 0xf3, 0x01, 0xb4, 0x74, 0x9c, 0xaf, 0xb8, 0x90,
-	0x6b, 0x7c, 0xb4, 0xce, 0x37, 0xf7, 0xa0, 0x63, 0x07, 0x5c, 0x4c, 0x02, 0xe6, 0x9d, 0xab, 0xef,
-	0xec, 0x1e, 0x6c, 0x05, 0x6e, 0xea, 0x87, 0x3c, 0x3e, 0x2f, 0x33, 0x5e, 0xf5, 0xe6, 0x29, 0xf4,
-	0x74, 0x18, 0x6f, 0x93, 0xd0, 0x95, 0x3c, 0x64, 0x96, 0x94, 0x29, 0x3f, 0xcb, 0x24, 0x13, 0xf8,
-	0x00, 0x7a, 0x29, 0x9b, 0xb3, 0x94, 0xc5, 0x1e, 0x73, 0xbc, 0x24, 0x8b, 0xa5, 0x13, 0xf1, 0x38,
-	0x13, 0xce, 0xa8, 0x4c, 0x6c, 0x77, 0x25, 0x4f, 0x94, 0x7a, 0xac, 0xc4, 0xd1, 0xde, 0x23, 0xd8,
-	0xf9, 0x63, 0x05, 0xdc, 0x86, 0xe6, 0xc4, 0x76, 0x4e, 0x5e, 0x9f, 0xcc, 0xba, 0x06, 0xfe, 0x0f,
-	0x5a, 0x13, 0xdb, 0x79, 0x73, 0x62, 0x9d, 0x9e, 0xbe, 0xef, 0xa2, 0xbd, 0x11, 0x80, 0x95, 0xc9,
-	0xc0, 0xf2, 0x24, 0x4f, 0x62, 0x0c, 0xd0, 0xb0, 0xaa, 0x8b, 0xba, 0xa6, 0x33, 0x6b, 0xda, 0x45,
-	0x8a, 0x60, 0x39, 0xef, 0xe8, 0x91, 0x3d, 0xeb, 0x6e, 0x3c, 0x7b, 0x72, 0x71, 0x45, 0x8c, 0xcb,
-	0x2b, 0x62, 0xdc, 0x5c, 0x11, 0xf4, 0x39, 0x27, 0xe8, 0x5b, 0x4e, 0xd0, 0x8f, 0x9c, 0xa0, 0x8b,
-	0x9c, 0xa0, 0x9f, 0x39, 0x41, 0xbf, 0x72, 0x62, 0xdc, 0xe4, 0x04, 0x7d, 0xb9, 0x26, 0xc6, 0xc5,
-	0x35, 0x31, 0x2e, 0xaf, 0x89, 0x71, 0x56, 0xfc, 0xae, 0x8f, 0x7f, 0x07, 0x00, 0x00, 0xff, 0xff,
-	0xf1, 0xf0, 0x13, 0xee, 0xc5, 0x03, 0x00, 0x00,
+var fileDescriptor_protos_8d36219dfeb56805 = []byte{
+	// 602 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xcd, 0x6e, 0xd3, 0x4e,
+	0x14, 0xc5, 0x3b, 0xcd, 0x57, 0x73, 0x93, 0xb6, 0xf9, 0x8f, 0xfa, 0x27, 0x11, 0x42, 0x21, 0x72,
+	0x37, 0xa1, 0x52, 0x2b, 0x25, 0xa8, 0x95, 0x58, 0x1a, 0x27, 0xa0, 0x0a, 0x5a, 0xaa, 0xc1, 0x02,
+	0xb1, 0xb2, 0xa6, 0xf6, 0x04, 0x8f, 0x6a, 0xcf, 0x44, 0x9e, 0xf1, 0x22, 0x6c, 0x78, 0x0a, 0x24,
+	0x9e, 0x85, 0x27, 0x60, 0xc9, 0x23, 0xa0, 0xf2, 0x22, 0x68, 0xc6, 0x76, 0x12, 0xb1, 0x61, 0xc1,
+	0xca, 0xe7, 0xce, 0x19, 0x9f, 0x7b, 0xe7, 0xe7, 0x0f, 0xe8, 0x2e, 0x33, 0xa9, 0xa5, 0x3a, 0xb3,
+	0x17, 0xdc, 0x2c, 0x2a, 0xe7, 0x15, 0xb4, 0x5f, 0xf0, 0x84, 0x79, 0x71, 0x2e, 0xee, 0x70, 0x0f,
+	0x6a, 0x0b, 0x1e, 0x0d, 0xd0, 0x08, 0x8d, 0xdb, 0xc4, 0x48, 0x3c, 0x80, 0x96, 0x8a, 0xe9, 0x44,
+	0xe5, 0xe9, 0x60, 0x77, 0x84, 0xc6, 0x5d, 0x52, 0x95, 0x18, 0x43, 0x5d, 0xf1, 0x4f, 0x6c, 0x50,
+	0x1b, 0xa1, 0x71, 0x8d, 0x58, 0xed, 0xbc, 0x84, 0xd6, 0x8c, 0x7f, 0x64, 0x4a, 0x2b, 0x6b, 0xc7,
+	0x74, 0x62, 0xb3, 0xba, 0xc4, 0x6a, 0x13, 0x9f, 0x46, 0xe7, 0x65, 0x90, 0x91, 0xf8, 0x01, 0x34,
+	0x55, 0x4c, 0xa7, 0xe7, 0x17, 0x36, 0xa6, 0x4b, 0xca, 0xca, 0xf9, 0x82, 0x60, 0xcf, 0x8c, 0x75,
+	0x29, 0x16, 0x72, 0xdd, 0x09, 0x6d, 0x3a, 0xe1, 0x27, 0xd0, 0x8a, 0x8a, 0x4e, 0x36, 0xae, 0x33,
+	0x3d, 0x3c, 0x2b, 0x8f, 0x57, 0x0e, 0x40, 0x2a, 0x1f, 0x3f, 0x86, 0x4e, 0x2a, 0xa3, 0x3c, 0x61,
+	0x81, 0x5e, 0x2d, 0x8b, 0x79, 0xdb, 0x04, 0x8a, 0x25, 0x7f, 0xb5, 0x34, 0x59, 0xcd, 0xd0, 0x1c,
+	0x5f, 0x0d, 0xea, 0xa3, 0xda, 0xb8, 0x33, 0xfd, 0xaf, 0x8a, 0x5a, 0x83, 0x21, 0xe5, 0x06, 0xe7,
+	0x33, 0x1c, 0xcc, 0x78, 0xc6, 0x42, 0x2d, 0xb3, 0xd5, 0x5c, 0xe8, 0x6c, 0x85, 0x8f, 0xa0, 0xc1,
+	0x85, 0x8c, 0x8a, 0xe9, 0xea, 0xa4, 0x28, 0xf0, 0x05, 0xf4, 0x13, 0xaa, 0x74, 0x90, 0xca, 0x88,
+	0x2f, 0x38, 0x8b, 0x02, 0xcd, 0x53, 0xa6, 0x34, 0x4d, 0x97, 0x76, 0xdc, 0x1a, 0xf9, 0xdf, 0xd8,
+	0x57, 0xa5, 0xeb, 0x57, 0xe6, 0x5f, 0x67, 0x75, 0xbe, 0x21, 0x68, 0x5c, 0xda, 0x16, 0xff, 0x4e,
+	0x85, 0x8b, 0x84, 0x0b, 0x16, 0x44, 0x54, 0xd3, 0x12, 0x3f, 0x14, 0x4b, 0x33, 0xaa, 0xa9, 0x79,
+	0x34, 0x5b, 0x54, 0xea, 0x15, 0x02, 0xfc, 0x0c, 0x3a, 0xa1, 0x4c, 0x97, 0x19, 0x53, 0x8a, 0x4b,
+	0x31, 0x68, 0x8c, 0xd0, 0xf8, 0x60, 0xda, 0xaf, 0xfa, 0x78, 0x1b, 0xcb, 0xcc, 0x4b, 0xb6, 0xf7,
+	0x3a, 0xc7, 0xd0, 0xb6, 0x38, 0x5f, 0x73, 0xa5, 0xb7, 0xf2, 0xd1, 0x76, 0xbe, 0x73, 0x02, 0x5d,
+	0x3f, 0xe6, 0xca, 0x8b, 0x59, 0x78, 0x67, 0xde, 0xb3, 0x87, 0xb0, 0x17, 0xd3, 0x2c, 0x4a, 0xb8,
+	0xb8, 0x2b, 0x19, 0xaf, 0x6b, 0xe7, 0x06, 0xfa, 0x16, 0xc6, 0x3b, 0x99, 0x50, 0xcd, 0x13, 0xe6,
+	0x6a, 0x9d, 0xf1, 0xdb, 0x5c, 0x33, 0x85, 0xcf, 0xa1, 0x9f, 0xb1, 0x05, 0xcb, 0x98, 0x08, 0x59,
+	0x10, 0xca, 0x5c, 0xe8, 0x20, 0xe5, 0x22, 0x57, 0xc1, 0xa4, 0x24, 0x76, 0xb4, 0xb6, 0x3d, 0xe3,
+	0x5e, 0x19, 0x73, 0xe2, 0x5c, 0x41, 0xc3, 0x55, 0x8a, 0x69, 0x83, 0x57, 0xd0, 0x94, 0x95, 0xdf,
+	0x82, 0xd5, 0xf8, 0x11, 0xb4, 0x75, 0x96, 0x8b, 0x90, 0x6a, 0x16, 0x59, 0xc0, 0x7b, 0x64, 0xb3,
+	0x60, 0xee, 0xd8, 0x42, 0x69, 0xb5, 0x73, 0x0a, 0x4d, 0x1b, 0xa7, 0xf0, 0x31, 0x34, 0xa8, 0x51,
+	0xf6, 0xb4, 0x9d, 0xe9, 0x7e, 0x05, 0xcc, 0xda, 0xa4, 0xf0, 0x4e, 0x4e, 0xe1, 0xf0, 0x0f, 0x80,
+	0xb8, 0x03, 0x2d, 0xcf, 0x0f, 0xae, 0xdf, 0x5c, 0xcf, 0x7b, 0x3b, 0x78, 0x1f, 0xda, 0x9e, 0x1f,
+	0xbc, 0xbd, 0x76, 0x6f, 0x6e, 0x3e, 0xf4, 0xd0, 0xc9, 0x04, 0xc0, 0xcd, 0x75, 0xec, 0x86, 0x9a,
+	0x4b, 0x81, 0x01, 0x9a, 0x6e, 0xb5, 0xd1, 0x6a, 0x32, 0x77, 0x67, 0x3d, 0x64, 0x12, 0xdc, 0xe0,
+	0x3d, 0xb9, 0xf4, 0xe7, 0xbd, 0xdd, 0xe7, 0xbd, 0xef, 0xf7, 0x43, 0xf4, 0xe3, 0x7e, 0x88, 0x7e,
+	0xde, 0x0f, 0xd1, 0xd7, 0x5f, 0xc3, 0x9d, 0xdb, 0xe2, 0x47, 0xf0, 0xf4, 0x77, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0x6f, 0xa6, 0xe6, 0xd5, 0x1f, 0x04, 0x00, 0x00,
 }

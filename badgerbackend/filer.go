@@ -289,7 +289,7 @@ func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.Director
 	if prev.Inode != 0 {
 		if prev.Inode == cv.Hardlink {
 			// log.Infof("same inode detected, not linking")
-			if prev != next {
+			if !proto.Equal(&prev, &next) {
 				if err := setValue(tx, permKey, &next); err != nil {
 					return false, err
 				}
@@ -413,7 +413,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 					return err
 				}
 			}
-			if prev != dentryValue || !prevFound {
+			if !proto.Equal(&prev, &dentryValue) || !prevFound {
 				if err = setValue(tx, permKey, &dentryValue); err != nil {
 					return err
 				}

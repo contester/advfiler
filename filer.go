@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"git.stingr.net/stingray/advfiler/common"
+
 	pb "git.stingr.net/stingray/advfiler/protos"
 	log "github.com/sirupsen/logrus"
 )
@@ -52,7 +53,7 @@ func tokenFromHeader(req *http.Request) string {
 var errUnauthorized = errors.New("unauthorized")
 
 func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
-	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_READ, path); !v {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, path); !v {
 		return errUnauthorized
 	}
 	names, err := f.backend.List(ctx, path)
@@ -111,7 +112,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		return f.handleList(ctx, w, r, path)
 	}
 
-	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_READ, path); !v {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, path); !v {
 		return errUnauthorized
 	}
 
@@ -189,7 +190,7 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	if path[len(path)-1] == '/' {
 		return fmt.Errorf("can't upload to directory")
 	}
-	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_WRITE, path); !v {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_WRITE, path); !v {
 		return errUnauthorized
 	}
 
@@ -228,7 +229,7 @@ type multiDownloadRequest struct {
 }
 
 func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.A_READ, ""); !v {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, ""); !v {
 		return errUnauthorized
 	}
 	decoder := json.NewDecoder(r.Body)
@@ -238,64 +239,70 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 	}
 	cout := zip.NewWriter(w)
 	defer cout.Close()
+	wr := writeToZip(cout)
 	for _, entry := range mdreq.Entry {
-		f.writeRemoteFileAs(ctx, cout, entry.Source, entry.Destination)
+		f.writeRemoteFileAs(ctx, wr, entry.Source, entry.Destination)
 	}
 	return nil
 }
 
-func (f *filerServer) writeRemoteFileAs(ctx context.Context, w *zip.Writer, name, as string) error {
-	result, err := f.backend.Download(ctx, name, common.DownloadOptions{})
-	if err != nil {
+func writeToZip(w *zip.Writer) func(result common.DownloadResult, as string) error{
+	return func(result common.DownloadResult, as string) error {
+		fh := zip.FileHeader{
+			Name:               as,
+			UncompressedSize64: uint64(result.Size()),
+			Method:             zip.Deflate,
+		}
+		if m := result.ModuleType(); m != "" {
+			fh.Name += "." + m
+		}
+		wr, err := w.CreateHeader(&fh)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(wr, result.Body())
 		return err
 	}
-	fh := zip.FileHeader{
-		Name:               as,
-		UncompressedSize64: uint64(result.Size()),
-		Method:             zip.Deflate,
-	}
-	if m := result.ModuleType(); m != "" {
-		fh.Name += "." + m
-	}
-	wr, err := w.CreateHeader(&fh)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(wr, result.Body())
-	return err
 }
 
-func (f *filerServer) writeRemoteFileTar(ctx context.Context, w *tar.Writer, name string) error {
+func writeToTar(w *tar.Writer) func(result common.DownloadResult, as string) error{
+	return func(result common.DownloadResult, as string) error {
+		fh := tar.Header{
+			Name:     as,
+			Mode:     0666,
+			Size:     result.Size(),
+			Typeflag: tar.TypeReg,
+		}
+		if tm := result.LastModifiedTimestamp(); tm != 0 {
+			fh.ModTime = time.Unix(tm, 0)
+		}
+		if mn := result.ModuleType(); mn != "" {
+			fh.Xattrs = map[string]string{"user.fs_module_type": mn}
+		}
+		if err := w.WriteHeader(&fh); err != nil {
+			return err
+		}
+		_, err := io.Copy(w, result.Body())
+		return err
+	}
+}
+
+func (f *filerServer) writeRemoteFileAs(ctx context.Context, wr func(result common.DownloadResult, as string) error, name, as string) error {
 	result, err := f.backend.Download(ctx, name, common.DownloadOptions{})
 	if err != nil {
 		return err
 	}
-	fh := tar.Header{
-		Name:     name,
-		Mode:     0666,
-		Size:     result.Size(),
-		Typeflag: tar.TypeReg,
-	}
-	if tm := result.LastModifiedTimestamp(); tm != 0 {
-		fh.ModTime = time.Unix(tm, 0)
-	}
-	if mn := result.ModuleType(); mn != "" {
-		fh.Xattrs = map[string]string{"user.fs_module_type": mn}
-	}
-	if err = w.WriteHeader(&fh); err != nil {
-		return err
-	}
-	_, err = io.Copy(w, result.Body())
-	return err
+	return wr(result, as)
 }
 
 func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
 	prefix := "problem/" + problemID + "/"
 	names, _ := f.backend.List(ctx, prefix)
+	wr := writeToZip(w)
 	for _, name := range names {
 		pname := strings.TrimPrefix(name, prefix)
 		if pname == "checker" {
-			f.writeRemoteFileAs(ctx, w, name, "checker")
+			f.writeRemoteFileAs(ctx, wr, name, "checker")
 			continue
 		}
 		splits := strings.Split(pname, "/")
@@ -312,14 +319,14 @@ func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, probl
 		if dname == "" {
 			continue
 		}
-		f.writeRemoteFileAs(ctx, w, name, dname)
+		f.writeRemoteFileAs(ctx, wr, name, dname)
 	}
 
 	return nil
 }
 
 func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
-	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_READ, ""); !v {
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.AuthAction_A_READ, ""); !v {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -330,6 +337,7 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 	contestID := r.FormValue("contest")
 	submitID := r.FormValue("submit")
 	testingID := r.FormValue("testing")
+	wz := writeToZip(cout)
 
 	if contestID != "" && submitID != "" && testingID != "" {
 		names, _ := f.backend.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
@@ -341,16 +349,60 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 			if splits[len(splits)-1] != "output" {
 				continue
 			}
-			f.writeRemoteFileAs(r.Context(), cout, name, splits[len(splits)-2]+".o")
+			f.writeRemoteFileAs(r.Context(), wz, name, splits[len(splits)-2]+".o")
 		}
-		f.writeRemoteFileAs(r.Context(), cout, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
-		f.writeRemoteFileAs(r.Context(), cout, "submit/"+contestID+"/"+submitID+"/sourceModule", "solution")
+		f.writeRemoteFileAs(r.Context(), wz, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
+		f.writeRemoteFileAs(r.Context(), wz, "submit/"+contestID+"/"+submitID+"/sourceModule", "solution")
 	}
 
 	if problemID := r.FormValue("problem"); problemID != "" {
 		f.writeProblemData(r.Context(), cout, problemID)
 	}
 }
+
+/*
+func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request) {
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.AuthAction_A_READ, ""); !v {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	contestID := r.FormValue("contest")
+	submitID := r.FormValue("submit")
+	testingID := r.FormValue("testing")
+	sizeLimit := 1024
+
+	if sz := r.FormValue("sizeLimit");sz != "" {
+		if isz, err := strconv.ParseInt(sz, 10, 64); err == nil {
+			sizeLimit = int(isz)
+		}
+	}
+
+	var result pb.Assets
+
+	names, _ := f.backend.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
+	for _, name := range names {
+		splits := strings.Split(name, "/")
+		if len(splits) < 5 {
+			continue
+		}
+
+		if splits[len(splits)-1] != "output" {
+			continue
+		}
+
+		f.writeRemoteFileAs(r.Context(), wz, name, splits[len(splits)-2]+".o")
+	}
+
+
+	b, err := proto.Marshal(&result)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(b)
+}
+*/
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path, err := f.urlToPath(r.URL.Path)
@@ -375,7 +427,7 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (f *filerServer) handleTarDownload(w http.ResponseWriter, r *http.Request) {
 	path := r.FormValue("path")
-	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_READ, path); !v {
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.AuthAction_A_READ, path); !v {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -389,9 +441,10 @@ func (f *filerServer) handleTarDownload(w http.ResponseWriter, r *http.Request) 
 
 	fw := tar.NewWriter(w)
 	defer fw.Close()
+	wfw := writeToTar(fw)
 
 	for _, v := range names {
-		f.writeRemoteFileTar(r.Context(), fw, v)
+		f.writeRemoteFileAs(r.Context(), wfw, v, v)
 	}
 }
 
@@ -404,7 +457,7 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_WRITE, ""); !v {
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.AuthAction_A_WRITE, ""); !v {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -452,7 +505,7 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.A_WRITE, ""); !v {
+	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.AuthAction_A_WRITE, ""); !v {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
