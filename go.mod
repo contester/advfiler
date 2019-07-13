@@ -1,7 +1,7 @@
 module git.stingr.net/stingray/advfiler
 
 require (
-	git.sgu.ru/sgu/systemdutil v0.0.0-20180813152046-df705fc6ca68
+	git.sgu.ru/sgu/systemdutil v0.0.0-20190630004458-18ee0bd8c828
 	github.com/AndreasBriese/bbloom v0.0.0-20180913140656-343706a395b7 // indirect
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
 	github.com/coreos/go-systemd v0.0.0-20180828140353-eee3db372b31
@@ -23,4 +23,5 @@ require (
 	golang.org/x/crypto v0.0.0-20180910181607-0e37d006457b // indirect
 	golang.org/x/net v0.0.0-20180921000356-2f5d2388922f
 	golang.org/x/sys v0.0.0-20180920110915-d641721ec2de // indirect
+	golang.org/x/text v0.3.2 // indirect
 )

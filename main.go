@@ -1,16 +1,12 @@
 package main // import "git.stingr.net/stingray/advfiler"
 
 import (
-	"flag"
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
-	"git.stingr.net/stingray/advfiler/boltbackend"
-	"git.stingr.net/stingray/advfiler/common"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/dgraph-io/badger"
 	"github.com/kelseyhightower/envconfig"
@@ -18,20 +14,16 @@ import (
 	"golang.org/x/net/trace"
 
 	log "github.com/sirupsen/logrus"
-	bolt "go.etcd.io/bbolt"
 
 	_ "net/http/pprof"
 )
 
 type conf3 struct {
-	BoltDB           string   `envconfig:"BOLT_DB"`
 	ListenHTTP       []string `envconfig:"LISTEN_HTTP"`
-	WeedBackend      string   `envconfig:"WEED_BACKEND" default:"http://localhost:9333"`
 	ManifestBadgerDB string   `envconfig:"MANIFEST_BDB"`
 	FilerBadgerDB    string   `envconfig:"FILER_BDB"`
 	ValidAuthTokens  []string `envconfig:"VALID_AUTH_TOKENS"`
 	EnableDebug      bool
-	Journal          bool
 }
 
 func badgerOpen(path string) (*badger.DB, error) {
@@ -54,31 +46,17 @@ func badgerOpen(path string) (*badger.DB, error) {
 }
 
 func main() {
-	flag.Parse()
+	systemdutil.Init()
 
 	var config conf3
 	if err := envconfig.Process("advfiler", &config); err != nil {
 		log.Fatal(err)
 	}
 
-	var journalHookSet bool
-	if config.Journal {
-		journalHookSet = true
-		setupJournalhook()
-	}
-
-	systemdutil.Logger = log.StandardLogger()
-	actFiles := activationFiles()
-
-	if len(actFiles) > 0 && !journalHookSet {
-		journalHookSet = true
-		setupJournalhook()
-	}
-
 	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) { return true, true }
 	http.Handle("/metrics", prometheus.Handler())
 
-	_, httpSockets, _ := systemdutil.ListenSystemd(actFiles)
+	_, httpSockets, _ := systemdutil.ListenSystemd(activationFiles())
 
 	authCheck := AuthChecker{
 		validTokens: make(map[string]struct{}, len(config.ValidAuthTokens)),
@@ -90,57 +68,39 @@ func main() {
 
 	httpSockets = append(httpSockets, systemdutil.MustListenTCPSlice(config.ListenHTTP)...)
 
-	var meKV common.DB
-	var filerBackend common.Backend
-
-	if config.ManifestBadgerDB != "" && config.FilerBadgerDB != "" {
-		mbdb, err := badgerOpen(config.ManifestBadgerDB)
-		if err != nil {
-			log.Fatalf("can't open manifest db: %v", err)
-		}
-		defer mbdb.Close()
-		fbdb, err := badgerOpen(config.FilerBadgerDB)
-		if err != nil {
-			log.Fatalf("can't open filer db: %v", err)
-		}
-		defer fbdb.Close()
-		fb, err := badgerbackend.NewFiler(fbdb)
-		if err != nil {
-			log.Fatalf("can't create badger filer: %v", err)
-		}
-		defer fb.Close()
-		if config.EnableDebug {
-			http.HandleFunc("/debugList/", fb.DebugList)
-			http.HandleFunc("/debugGC/", fb.DebugGC)
-		}
-		filerBackend = fb
-		meKV = badgerbackend.NewKV(mbdb, nil)
-	} else {
-		if config.BoltDB == "" {
-			log.Fatal("BOLT_DB needs to be specified")
-		}
-		db, err := bolt.Open(config.BoltDB, 0600, &bolt.Options{Timeout: 1 * time.Second})
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer db.Close()
-		db.NoSync = true
-		fiKV := boltbackend.NewKV(db, []byte("fs"))
-		meKV = boltbackend.NewKV(db, []byte("problems"))
-		filerBackend = boltbackend.NewFiler(fiKV, &WeedClient{master: config.WeedBackend})
+	if config.ManifestBadgerDB == "" || config.FilerBadgerDB == "" {
+		log.Fatal("database directories must be specified")
 	}
 
-	f := NewFiler(filerBackend, &authCheck)
-	ms := NewMetadataServer(meKV)
+	mbdb, err := badgerOpen(config.ManifestBadgerDB)
+	if err != nil {
+		log.Fatalf("can't open manifest db: %v", err)
+	}
+	defer mbdb.Close()
+	fbdb, err := badgerOpen(config.FilerBadgerDB)
+	if err != nil {
+		log.Fatalf("can't open filer db: %v", err)
+	}
+	defer fbdb.Close()
+	fb, err := badgerbackend.NewFiler(fbdb)
+	if err != nil {
+		log.Fatalf("can't create badger filer: %v", err)
+	}
+	defer fb.Close()
+	if config.EnableDebug {
+		http.HandleFunc("/debugList/", fb.DebugList)
+		http.HandleFunc("/debugGC/", fb.DebugGC)
+	}
+
+	f := NewFiler(fb, &authCheck)
+	ms := NewMetadataServer(badgerbackend.NewKV(mbdb, nil))
 	http.Handle("/fs/", f)
 	http.HandleFunc("/fs2/", f.HandlePackage)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)
 	http.HandleFunc("/tar/", f.handleTarUpload)
 	http.HandleFunc("/wipe/", f.handleWipe)
-	for _, s := range httpSockets {
-		go http.Serve(s, nil)
-	}
+	systemdutil.ServeAll(nil, httpSockets, nil)
 	daemon.SdNotify(false, "READY=1")
 	systemdutil.WaitSigint()
 	daemon.SdNotify(false, "STOPPING=1")
