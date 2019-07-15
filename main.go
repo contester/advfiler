@@ -56,7 +56,7 @@ func main() {
 	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) { return true, true }
 	http.Handle("/metrics", prometheus.Handler())
 
-	_, httpSockets, _ := systemdutil.ListenSystemd(activationFiles())
+	_, httpSockets, _ := systemdutil.ListenSystemd(systemdutil.ActivationFiles())
 
 	authCheck := AuthChecker{
 		validTokens: make(map[string]struct{}, len(config.ValidAuthTokens)),
