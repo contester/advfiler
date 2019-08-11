@@ -18,6 +18,7 @@ import (
 	"git.stingr.net/stingray/advfiler/common"
 
 	pb "git.stingr.net/stingray/advfiler/protos"
+	"github.com/gogo/protobuf/proto"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -246,7 +247,7 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 	return nil
 }
 
-func writeToZip(w *zip.Writer) func(result common.DownloadResult, as string) error{
+func writeToZip(w *zip.Writer) func(result common.DownloadResult, as string) error {
 	return func(result common.DownloadResult, as string) error {
 		fh := zip.FileHeader{
 			Name:               as,
@@ -265,7 +266,7 @@ func writeToZip(w *zip.Writer) func(result common.DownloadResult, as string) err
 	}
 }
 
-func writeToTar(w *tar.Writer) func(result common.DownloadResult, as string) error{
+func writeToTar(w *tar.Writer) func(result common.DownloadResult, as string) error {
 	return func(result common.DownloadResult, as string) error {
 		fh := tar.Header{
 			Name:     as,
@@ -360,9 +361,26 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*
+func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
+	fr, err := f.backend.Download(ctx, name, common.DownloadOptions{})
+	if err != nil {
+		return nil, err
+	}
+	xr := pb.Asset{
+		Name:         as,
+		OriginalSize: fr.Size(),
+		Truncated:    fr.Size() > limit,
+	}
+	bb := make([]byte, int(limit))
+	n, err := fr.Body().Read(bb)
+	bb = bb[:n]
+	xr.Data = append([]byte(nil), bb...)
+	return &xr, nil
+}
+
 func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request) {
-	if v, _ := f.authChecker.Check(r.Context(), tokenFromHeader(r), pb.AuthAction_A_READ, ""); !v {
+	ctx := r.Context()
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, ""); !v {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -370,30 +388,72 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	contestID := r.FormValue("contest")
 	submitID := r.FormValue("submit")
 	testingID := r.FormValue("testing")
-	sizeLimit := 1024
+	problemID := r.FormValue("problem")
+	sizeLimit := int64(1024)
+	solutionSizeLimit := int64(128000)
 
-	if sz := r.FormValue("sizeLimit");sz != "" {
+	if sz := r.FormValue("sizeLimit"); sz != "" {
 		if isz, err := strconv.ParseInt(sz, 10, 64); err == nil {
-			sizeLimit = int(isz)
+			sizeLimit = isz
 		}
 	}
 
-	var result pb.Assets
+	var result pb.TestingRecord
+	var err error
+	result.Solution, err = f.downloadAsset(ctx, "submit/"+contestID+"/"+submitID+"/sourceModule", "source", solutionSizeLimit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
-	names, _ := f.backend.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
+	prefix := "problem/" + problemID + "/"
+
+	names, err := f.backend.List(ctx, prefix)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	testSet := make(map[int64]struct{})
+
 	for _, name := range names {
-		splits := strings.Split(name, "/")
-		if len(splits) < 5 {
+		pname := strings.TrimPrefix(name, prefix)
+		if pname == "checker" {
 			continue
 		}
-
-		if splits[len(splits)-1] != "output" {
+		splits := strings.Split(pname, "/")
+		if len(splits) != 3 || splits[0] != "tests" {
 			continue
 		}
-
-		f.writeRemoteFileAs(r.Context(), wz, name, splits[len(splits)-2]+".o")
+		testID, err := strconv.ParseInt(splits[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		testSet[testID] = struct{}{}
 	}
+	testList := make([]int64, 0, len(testSet))
+	for i := range testSet {
+		testList = append(testList, i)
+	}
+	sort.Slice(testList, func(i, j int) bool { return testList[i] < testList[j] })
 
+	for _, testID := range testList {
+		tprefix := "submit/" + contestID + "/" + submitID + "/" + testingID + "/" + strconv.FormatInt(testID, 10) + "/"
+		out, err := f.downloadAsset(ctx, tprefix+"output", "otuput", sizeLimit)
+		if err != nil {
+			continue
+		}
+		testRecord := pb.TestRecord{
+			TestId: testID,
+			Output: out,
+		}
+		testPrefix := prefix + "tests/" + strconv.FormatInt(testID, 10) + "/"
+		if testRecord.Input, err = f.downloadAsset(ctx, testPrefix+"input.txt", "input", sizeLimit); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		testRecord.Answer, _ = f.downloadAsset(ctx, testPrefix+"answer.txt", "answer", sizeLimit)
+	}
 
 	b, err := proto.Marshal(&result)
 	if err != nil {
@@ -402,7 +462,6 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	}
 	w.Write(b)
 }
-*/
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path, err := f.urlToPath(r.URL.Path)

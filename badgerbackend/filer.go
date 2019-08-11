@@ -539,9 +539,6 @@ func (r *downloadResult) Size() int64                  { return r.inode.Size_ }
 func (r *downloadResult) LastModifiedTimestamp() int64 { return r.dentry.LastModifiedTimestamp }
 func (r *downloadResult) ModuleType() string           { return r.dentry.ModuleType }
 func (r *downloadResult) Digests() *pb.Digests         { return r.inode.Digests }
-func (r *downloadResult) WriteTo(ctx context.Context, w io.Writer, limit int64) error {
-	return nil
-}
 func (r *downloadResult) Body() io.Reader {
 	return r.body
 }

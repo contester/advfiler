@@ -71,7 +71,6 @@ type DownloadResult interface {
 	Size() int64
 	ModuleType() string
 	Digests() *pb.Digests
-	WriteTo(ctx context.Context, w io.Writer, limit int64) error
 	LastModifiedTimestamp() int64
 	Body() io.Reader
 }

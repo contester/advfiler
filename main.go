@@ -100,6 +100,7 @@ func main() {
 	http.HandleFunc("/problem/get/", ms.handleGetManifest)
 	http.HandleFunc("/tar/", f.handleTarUpload)
 	http.HandleFunc("/wipe/", f.handleWipe)
+	http.HandleFunc("/protopackage/", f.handleProtoPackage)
 	systemdutil.ServeAll(nil, httpSockets, nil)
 	daemon.SdNotify(false, "READY=1")
 	systemdutil.WaitSigint()
