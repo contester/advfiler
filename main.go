@@ -10,7 +10,7 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/dgraph-io/badger"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
 
 	log "github.com/sirupsen/logrus"
@@ -54,7 +54,7 @@ func main() {
 	}
 
 	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) { return true, true }
-	http.Handle("/metrics", prometheus.Handler())
+	http.Handle("/metrics", promhttp.Handler())
 
 	_, httpSockets, _ := systemdutil.ListenSystemd(systemdutil.ActivationFiles())
 
@@ -101,8 +101,10 @@ func main() {
 	http.HandleFunc("/tar/", f.handleTarUpload)
 	http.HandleFunc("/wipe/", f.handleWipe)
 	http.HandleFunc("/protopackage/", f.handleProtoPackage)
+	http.HandleFunc("/protopackage", f.handleProtoPackage)
 	systemdutil.ServeAll(nil, httpSockets, nil)
 	daemon.SdNotify(false, "READY=1")
 	systemdutil.WaitSigint()
+	log.Infof("stopping")
 	daemon.SdNotify(false, "STOPPING=1")
 }

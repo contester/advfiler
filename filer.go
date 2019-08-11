@@ -362,8 +362,10 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
+	log.Infof("downloadAsset(%v)", name)
 	fr, err := f.backend.Download(ctx, name, common.DownloadOptions{})
 	if err != nil {
+		log.Infof("err: %v", err)
 		return nil, err
 	}
 	xr := pb.Asset{
@@ -392,6 +394,11 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	sizeLimit := int64(1024)
 	solutionSizeLimit := int64(128000)
 
+	if !strings.HasPrefix(problemID, "problem/") {
+		http.Error(w, "invalid problem ID: "+problemID, http.StatusNotFound)
+		return
+	}
+
 	if sz := r.FormValue("sizeLimit"); sz != "" {
 		if isz, err := strconv.ParseInt(sz, 10, 64); err == nil {
 			sizeLimit = isz
@@ -402,11 +409,11 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	var err error
 	result.Solution, err = f.downloadAsset(ctx, "submit/"+contestID+"/"+submitID+"/sourceModule", "source", solutionSizeLimit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, "submit/"+contestID+"/"+submitID+"/sourceModule: "+err.Error(), http.StatusNotFound)
 		return
 	}
 
-	prefix := "problem/" + problemID + "/"
+	prefix := problemID + "/"
 
 	names, err := f.backend.List(ctx, prefix)
 	if err != nil {
@@ -436,10 +443,11 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 		testList = append(testList, i)
 	}
 	sort.Slice(testList, func(i, j int) bool { return testList[i] < testList[j] })
+	log.Infof("test list: %v", testList)
 
 	for _, testID := range testList {
-		tprefix := "submit/" + contestID + "/" + submitID + "/" + testingID + "/" + strconv.FormatInt(testID, 10) + "/"
-		out, err := f.downloadAsset(ctx, tprefix+"output", "otuput", sizeLimit)
+		outName := "submit/" + contestID + "/" + submitID + "/" + testingID + "/" + strconv.FormatInt(testID, 10) + "/output"
+		out, err := f.downloadAsset(ctx, outName, "output", sizeLimit)
 		if err != nil {
 			continue
 		}
@@ -453,6 +461,7 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		testRecord.Answer, _ = f.downloadAsset(ctx, testPrefix+"answer.txt", "answer", sizeLimit)
+		result.Test = append(result.Test, &testRecord)
 	}
 
 	b, err := proto.Marshal(&result)
@@ -460,6 +469,7 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Add("Content-Length", strconv.FormatInt(int64(len(b)), 10))
 	w.Write(b)
 }
 
