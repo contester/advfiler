@@ -5,7 +5,7 @@ Requires=local-fs.target network.target
 
 [Service]
 EnvironmentFile=/etc/sysconfig/contester-advfiler
-ExecStart=/usr/bin/contester-advfiler -bolt /var/lib/contester-advfiler/data.db
+ExecStart=/usr/bin/contester-advfiler
 Restart=on-failure
 User=contester-advfiler
 Group=contester-advfiler
