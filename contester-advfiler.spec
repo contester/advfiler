@@ -1,7 +1,7 @@
 %global debug_package %{nil}
  
 Name:		contester-advfiler
-Version:	0.0.1
+Version:	0.0.2
 Release:	1%{?dist}
 Summary:	Contester storage
  
@@ -64,3 +64,6 @@ export GO111MODULE=off
 %config(noreplace) %{_sysconfdir}/sysconfig/contester-advfiler
  
 %changelog
+* Sun Oct 06 2019 Paul Komkoff <i@stingr.net> 0.0.2-1
+- new package built with tito
+
