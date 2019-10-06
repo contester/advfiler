@@ -39,6 +39,7 @@ exit 0
 %build
 mkdir -p goapp/bin
 export GOPATH=${PWD}/goapp
+export GO111MODULE=off
 %gobuild -o goapp/bin/contester-advfiler
  
 %install
