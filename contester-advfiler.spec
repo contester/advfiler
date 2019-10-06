@@ -38,7 +38,7 @@ exit 0
  
 %build
 mkdir -p goapp/bin goapp/src/git.stingr.net/stingray
-ln -s ${PWD} git.stingr.net/stingray/advfiler
+ln -s ${PWD} goapp/src/git.stingr.net/stingray/advfiler
 export GOPATH=${PWD}/goapp
 export GO111MODULE=off
 %gobuild -o goapp/bin/contester-advfiler git.stingr.net/stingray/advfiler
