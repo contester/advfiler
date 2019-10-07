@@ -34,6 +34,7 @@ func badgerOpen(path, vpath string) (*badger.DB, error) {
 	if vpath != "" {
 		opt.ValueDir = vpath
 	}
+	opt.Logger = log.StandardLogger()
 
 	modBadgerOpts(&opt)
 
