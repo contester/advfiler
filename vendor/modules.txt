@@ -1,6 +1,6 @@
-# git.sgu.ru/sgu/systemdutil v0.0.0-20190630004458-18ee0bd8c828
+# git.sgu.ru/sgu/systemdutil v0.0.0-20191007205902-be650a5ef45b
 git.sgu.ru/sgu/systemdutil
-# github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9
+# github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
 github.com/AndreasBriese/bbloom
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
@@ -27,7 +27,7 @@ github.com/golang/protobuf/proto
 github.com/golang/snappy
 # github.com/kelseyhightower/envconfig v1.4.0
 github.com/kelseyhightower/envconfig
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
@@ -37,20 +37,21 @@ github.com/pkg/errors
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
-# github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
+# github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.6.0
+# github.com/prometheus/common v0.7.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.0.3
+# github.com/prometheus/procfs v0.0.5
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
+github.com/prometheus/procfs/internal/util
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
 # github.com/wercker/journalhook v0.0.0-20180428041537-5d0a5ae867b3
 github.com/wercker/journalhook
-# golang.org/x/net v0.0.0-20191003171128-d98b1b443823
+# golang.org/x/net v0.0.0-20191007182048-72f939374954
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/h2c
@@ -58,10 +59,10 @@ golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/sys v0.0.0-20190801041406-cbf593c0f2f3
+# golang.org/x/sys v0.0.0-20191007154456-ef33b2fb2c41
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.3.0
+# golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
