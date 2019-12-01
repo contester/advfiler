@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"git.stingr.net/stingray/advfiler/common"
-	"github.com/dgraph-io/badger"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/snappy"
 
 	pb "git.stingr.net/stingray/advfiler/protos"
+	badger "github.com/dgraph-io/badger/v2"
 	log "github.com/sirupsen/logrus"
 )
 

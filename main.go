@@ -7,11 +7,11 @@ import (
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/dgraph-io/badger"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
 
+	badger "github.com/dgraph-io/badger/v2"
 	log "github.com/sirupsen/logrus"
 
 	_ "net/http/pprof"
