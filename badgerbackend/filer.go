@@ -16,7 +16,6 @@ import (
 
 	"git.stingr.net/stingray/advfiler/common"
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/snappy"
 
 	pb "git.stingr.net/stingray/advfiler/protos"
 	badger "github.com/dgraph-io/badger/v2"
@@ -247,7 +246,7 @@ func unlinkInode(tx *badger.Txn, inode uint64) error {
 		checksum := inodeValue.GetDigests().GetSha256()
 		if len(checksum) == 0 {
 			hasher := sha256.New()
-			io.Copy(hasher, snappy.NewReader(bytes.NewReader(inodeValue.InlineData)))
+			hasher.Write(inodeValue.InlineData)
 			checksum = hasher.Sum(nil)
 		}
 		checksumKey := makeChecksumKey(checksum)
@@ -357,25 +356,14 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		f:       s,
 		tempKey: makeTempKey(info.Name),
 	}
-	//xw := bufio.NewWriterSize(&cw, 63*1024)
 
-	bw := snappy.NewBufferedWriter(&cw)
 	hashes := common.NewHashes()
-	mw := io.MultiWriter(bw, hashes)
+	mw := io.MultiWriter(&cw, hashes)
 	buf := make([]byte, 48*1024)
 	n, err := io.CopyBuffer(mw, body, buf)
 	if err != nil {
 		return common.UploadStatus{}, err
 	}
-	if err = bw.Flush(); err != nil {
-		return common.UploadStatus{}, err
-	}
-	if err = bw.Close(); err != nil {
-		return common.UploadStatus{}, err
-	}
-	//if err = xw.Flush(); err != nil {
-	//	return common.UploadStatus{}, err
-	//}
 
 	if err = cw.Close(); err != nil {
 		return common.UploadStatus{}, err
@@ -605,12 +593,11 @@ func (f *Filer) Download(ctx context.Context, path string, options common.Downlo
 		chunks: result.inode.Chunks,
 	}
 
-	result.body = snappy.NewReader(&cdr)
+	result.body = &cdr
 
 	if result.inode.Digests == nil && len(result.inode.InlineData) > 0 {
 		hashes := common.NewHashes()
-		cr := snappy.NewReader(bytes.NewReader(result.inode.InlineData))
-		if _, err := io.Copy(hashes, cr); err == nil {
+		if _, err := hashes.Write(result.inode.InlineData); err == nil {
 			result.inode.Digests = hashes.Digests()
 		}
 	}
