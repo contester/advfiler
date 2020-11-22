@@ -1,7 +1,7 @@
 %global debug_package %{nil}
  
 Name:		contester-advfiler
-Version:	0.0.1
+Version:	0.0.3
 Release:	1%{?dist}
 Summary:	Contester storage
  
@@ -15,13 +15,13 @@ Requires(pre): shadow-utils
 %{?systemd_requires}
  
 %description
-Installer backend and frontend
+Contester storage server
  
 %pre
 getent group %{name} >/dev/null || groupadd -r %{name}
 getent passwd %{name} >/dev/null || \
     useradd -r -g %{name} -d %{_sharedstatedir}/%{name} -s /sbin/nologin \
-    -c "Smartpxe" %{name}
+    -c "Contester storage" %{name}
 exit 0
  
 %post
@@ -37,29 +37,36 @@ exit 0
 %setup -q
  
 %build
-mkdir -p goapp/src/git.sgu.ru/sgu goapp/bin
-ln -s ${PWD} goapp/src/git.sgu.ru/sgu/%{name}
+mkdir -p goapp/bin goapp/src/git.stingr.net/stingray
+ln -s ${PWD} goapp/src/git.stingr.net/stingray/advfiler
 export GOPATH=${PWD}/goapp
-%gobuild -o goapp/bin/smartpxe git.sgu.ru/sgu/%{name}/smartpxe
+export GO111MODULE=off
+%gobuild -o goapp/bin/contester-advfiler git.stingr.net/stingray/advfiler
  
 %install
  
 %{__install} -d $RPM_BUILD_ROOT%{_bindir}
-%{__install} -v -D -t $RPM_BUILD_ROOT%{_bindir} goapp/bin/smartpxe
+%{__install} -v -D -t $RPM_BUILD_ROOT%{_bindir} goapp/bin/contester-advfiler
 %{__install} -d $RPM_BUILD_ROOT%{_unitdir}
-%{__install} -v -D -t $RPM_BUILD_ROOT%{_unitdir} smartpxe.service
-%{__install} -v -D -t $RPM_BUILD_ROOT%{_unitdir} smartpxe.socket
+%{__install} -v -D -t $RPM_BUILD_ROOT%{_unitdir} contester-advfiler.service
+%{__install} -v -D -t $RPM_BUILD_ROOT%{_unitdir} contester-advfiler.socket
 %{__install} -d -m 0755 %{buildroot}%{_sysconfdir}/%{name}
 %{__install} -d $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig
-%{__install} -m 644 -T smartpxe.sysconfig %{buildroot}%{_sysconfdir}/sysconfig/smartpxe
+%{__install} -m 644 -T contester-advfiler.sysconfig %{buildroot}%{_sysconfdir}/sysconfig/contester-advfiler
 %{__install} -d -m 0755 %{buildroot}%{_sharedstatedir}/%{name}
  
 %files
-%{_bindir}/smartpxe
+%{_bindir}/contester-advfiler
 %dir %attr(-,%{name},%{name}) %{_sharedstatedir}/%{name}
-%{_unitdir}/smartpxe.service
-%{_unitdir}/smartpxe.socket
+%{_unitdir}/contester-advfiler.service
+%{_unitdir}/contester-advfiler.socket
 %config(noreplace) %{_sysconfdir}/%{name}
-%config(noreplace) %{_sysconfdir}/sysconfig/smartpxe
+%config(noreplace) %{_sysconfdir}/sysconfig/contester-advfiler
  
 %changelog
+* Sun Oct 06 2019 Paul Komkoff <i@stingr.net> 0.0.3-1
+- Remove key not found logspam (i@stingr.net)
+
+* Sun Oct 06 2019 Paul Komkoff <i@stingr.net> 0.0.2-1
+- new package built with tito
+

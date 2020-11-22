@@ -3,7 +3,6 @@ package main // import "git.stingr.net/stingray/advfiler"
 import (
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
@@ -13,24 +12,31 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
 
+	badger "github.com/dgraph-io/badger/v2"
 	log "github.com/sirupsen/logrus"
 
 	_ "net/http/pprof"
 )
 
 type conf3 struct {
-	ListenHTTP       []string `envconfig:"LISTEN_HTTP"`
-	ManifestBadgerDB string   `envconfig:"MANIFEST_BDB"`
-	FilerBadgerDB    string   `envconfig:"FILER_BDB"`
-	ValidAuthTokens  []string `envconfig:"VALID_AUTH_TOKENS"`
-	EnableDebug      bool
+	ListenHTTP             []string `envconfig:"LISTEN_HTTP"`
+	ManifestBadgerDB       string   `envconfig:"MANIFEST_BDB"`
+	ManifestBadgerDBValues string   `envconfig:"MANIFEST_BDB_VALUES"`
+
+	FilerBadgerDB       string `envconfig:"FILER_BDB"`
+	FilerBadgerDBValues string `envconfig:"FILER_BDB_VALUES"`
+
+	ValidAuthTokens []string `envconfig:"VALID_AUTH_TOKENS"`
+	EnableDebug     bool
 }
 
-func badgerOpen(path string) (*badger.DB, error) {
+func badgerOpen(path, vpath string) (*badger.DB, error) {
 	opt := badger.DefaultOptions(path)
+	if vpath != "" {
+		opt.ValueDir = vpath
+	}
+	opt.Logger = log.StandardLogger()
 
-	opt.Dir = filepath.Join(path, "keys")
-	opt.ValueDir = filepath.Join(path, "values")
 	modBadgerOpts(&opt)
 
 	if err := os.MkdirAll(opt.Dir, os.ModePerm); err != nil {
@@ -72,12 +78,12 @@ func main() {
 		log.Fatal("database directories must be specified")
 	}
 
-	mbdb, err := badgerOpen(config.ManifestBadgerDB)
+	mbdb, err := badgerOpen(config.ManifestBadgerDB, config.ManifestBadgerDBValues)
 	if err != nil {
 		log.Fatalf("can't open manifest db: %v", err)
 	}
 	defer mbdb.Close()
-	fbdb, err := badgerOpen(config.FilerBadgerDB)
+	fbdb, err := badgerOpen(config.FilerBadgerDB, config.FilerBadgerDBValues)
 	if err != nil {
 		log.Fatalf("can't open filer db: %v", err)
 	}

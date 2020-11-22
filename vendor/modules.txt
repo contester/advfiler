@@ -1,0 +1,69 @@
+# git.sgu.ru/sgu/systemdutil v0.0.0-20191007205902-be650a5ef45b
+git.sgu.ru/sgu/systemdutil
+# github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
+github.com/AndreasBriese/bbloom
+# github.com/beorn7/perks v1.0.1
+github.com/beorn7/perks/quantile
+# github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
+github.com/coreos/go-systemd/activation
+github.com/coreos/go-systemd/daemon
+github.com/coreos/go-systemd/journal
+# github.com/dgraph-io/badger v1.6.0
+github.com/dgraph-io/badger
+github.com/dgraph-io/badger/options
+github.com/dgraph-io/badger/pb
+github.com/dgraph-io/badger/skl
+github.com/dgraph-io/badger/table
+github.com/dgraph-io/badger/y
+# github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2
+github.com/dgryski/go-farm
+# github.com/dustin/go-humanize v1.0.0
+github.com/dustin/go-humanize
+# github.com/gogo/protobuf v1.3.0
+github.com/gogo/protobuf/proto
+# github.com/golang/protobuf v1.3.2
+github.com/golang/protobuf/proto
+# github.com/golang/snappy v0.0.1
+github.com/golang/snappy
+# github.com/kelseyhightower/envconfig v1.4.0
+github.com/kelseyhightower/envconfig
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+github.com/konsorten/go-windows-terminal-sequences
+# github.com/matttproud/golang_protobuf_extensions v1.0.1
+github.com/matttproud/golang_protobuf_extensions/pbutil
+# github.com/pkg/errors v0.8.1
+github.com/pkg/errors
+# github.com/prometheus/client_golang v1.1.0
+github.com/prometheus/client_golang/prometheus
+github.com/prometheus/client_golang/prometheus/internal
+github.com/prometheus/client_golang/prometheus/promhttp
+# github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
+github.com/prometheus/client_model/go
+# github.com/prometheus/common v0.7.0
+github.com/prometheus/common/expfmt
+github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+github.com/prometheus/common/model
+# github.com/prometheus/procfs v0.0.5
+github.com/prometheus/procfs
+github.com/prometheus/procfs/internal/fs
+github.com/prometheus/procfs/internal/util
+# github.com/sirupsen/logrus v1.4.2
+github.com/sirupsen/logrus
+# github.com/wercker/journalhook v0.0.0-20180428041537-5d0a5ae867b3
+github.com/wercker/journalhook
+# golang.org/x/net v0.0.0-20191007182048-72f939374954
+golang.org/x/net/http/httpguts
+golang.org/x/net/http2
+golang.org/x/net/http2/h2c
+golang.org/x/net/http2/hpack
+golang.org/x/net/idna
+golang.org/x/net/internal/timeseries
+golang.org/x/net/trace
+# golang.org/x/sys v0.0.0-20191007154456-ef33b2fb2c41
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# golang.org/x/text v0.3.2
+golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
