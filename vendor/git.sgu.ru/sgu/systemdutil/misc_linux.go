@@ -3,8 +3,8 @@ package systemdutil
 import (
 	"os"
 
-	"github.com/coreos/go-systemd/activation"
-	"github.com/wercker/journalhook"
+	"git.sgu.ru/sgu/journalhook"
+	"github.com/coreos/go-systemd/v22/activation"
 )
 
 func SetupJournalhook(what bool) {
