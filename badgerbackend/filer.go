@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"git.stingr.net/stingray/advfiler/common"
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v2"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/snappy"
 
@@ -382,7 +382,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	}
 
 	inodeValue := pb.Inode{
-		Size_:      n,
+		Size:       n,
 		InlineData: cw.inlineData,
 		Chunks:     cw.chunks.Chunks,
 	}
@@ -407,7 +407,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 			return err
 		}
 
-		if inodeValue.Size_ == 0 {
+		if inodeValue.Size == 0 {
 			if prev.Inode != 0 {
 				if err = unlinkInode(tx, prev.Inode); err != nil {
 					return err
@@ -535,7 +535,7 @@ type chunkResultReader struct {
 	chunks []uint64
 }
 
-func (r *downloadResult) Size() int64                  { return r.inode.Size_ }
+func (r *downloadResult) Size() int64                  { return r.inode.Size }
 func (r *downloadResult) LastModifiedTimestamp() int64 { return r.dentry.LastModifiedTimestamp }
 func (r *downloadResult) ModuleType() string           { return r.dentry.ModuleType }
 func (r *downloadResult) Digests() *pb.Digests         { return r.inode.Digests }

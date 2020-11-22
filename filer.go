@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"git.stingr.net/stingray/advfiler/common"
+	"google.golang.org/protobuf/proto"
 
 	pb "git.stingr.net/stingray/advfiler/protos"
-	"github.com/gogo/protobuf/proto"
 	log "github.com/sirupsen/logrus"
 )
 

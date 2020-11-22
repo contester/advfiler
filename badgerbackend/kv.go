@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"git.stingr.net/stingray/advfiler/common"
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v2"
 )
 
 type KV struct {
@@ -21,8 +21,10 @@ func NewKV(db *badger.DB, prefix []byte) *KV {
 }
 
 func (s *KV) makeKey(key string) []byte {
-	if len(s.prefix) == 0 { return []byte(key)}
-	result := make([]byte, 0, len(s.prefix) + len(key))
+	if len(s.prefix) == 0 {
+		return []byte(key)
+	}
+	result := make([]byte, 0, len(s.prefix)+len(key))
 	result = append(result, s.prefix...)
 	return append(result, []byte(key)...)
 }

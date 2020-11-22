@@ -8,7 +8,7 @@ import (
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v2"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
@@ -27,7 +27,7 @@ type conf3 struct {
 }
 
 func badgerOpen(path string) (*badger.DB, error) {
-	opt := badger.DefaultOptions
+	opt := badger.DefaultOptions(path)
 
 	opt.Dir = filepath.Join(path, "keys")
 	opt.ValueDir = filepath.Join(path, "values")
