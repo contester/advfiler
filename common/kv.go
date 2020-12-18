@@ -10,6 +10,8 @@ import (
 	"errors"
 	"hash"
 	"io"
+	"sort"
+	"sync"
 
 	"github.com/golang/protobuf/proto"
 
@@ -115,6 +117,51 @@ type Backend interface {
 	Download(ctx context.Context, path string, options DownloadOptions) (DownloadResult, error)
 	Delete(ctx context.Context, path string) error
 	Close()
+}
+
+type MultiBackend struct {
+	mu     sync.RWMutex
+	mounts map[string]Backend
+}
+
+func (s *MultiBackend) Mount(path string, backend Backend) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mounts == nil {
+		s.mounts = make(map[string]Backend)
+	}
+	s.mounts[path] = backend
+}
+
+func (s *MultiBackend) List(ctx context.Context, path string) ([]string, error) {
+	s.mu.RLock()
+
+	var found Backend
+	for k, v := range s.mounts {
+		if k == path {
+			found = v
+			break
+		}
+	}
+	if found != nil {
+		s.mu.RUnlock()
+		return found.List(ctx, path)
+	}
+	backends := make([]Backend, 0, len(s.mounts))
+	for _, v := range s.mounts {
+		backends = append(backends, v)
+	}
+	s.mu.RUnlock()
+	var result []string
+	for _, v := range backends {
+		r, err := v.List(ctx, path)
+		if err != nil && err != NotFound {
+			return nil, err
+		}
+		result = append(result, r...)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 type FileInfo struct {

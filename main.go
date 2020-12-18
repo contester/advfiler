@@ -12,7 +12,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
 
-	badger "github.com/dgraph-io/badger/v2"
 	log "github.com/sirupsen/logrus"
 
 	_ "net/http/pprof"
