@@ -129,13 +129,16 @@ func maybeWrapKNF(key []byte, err error) error {
 	return err
 }
 
-func (s *Filer) insertChunk(iKey []byte, temp pb.ChunkList, b []byte) (uint64, error) {
+func (s *Filer) insertChunk(iKey []byte, chunks []uint64, b []byte) (uint64, error) {
 	next, err := s.seq.Next()
 	if err != nil {
 		return 0, err
 	}
-	temp.Chunks = append(temp.Chunks, next)
 	chunkKey := makeChunkKey(next)
+
+	temp := pb.ChunkList{
+		Chunks: append(chunks, next),
+	}
 
 	iValue, err := proto.Marshal(&temp)
 	if err != nil {
@@ -188,7 +191,8 @@ type chunkingWriter struct {
 	tempKey    []byte
 	inlineData []byte
 	buf        bytes.Buffer
-	chunks     pb.ChunkList
+	//chunks     *pb.ChunkList
+	chunks []uint64
 }
 
 func (s *chunkingWriter) Write(b []byte) (int, error) {
@@ -204,30 +208,29 @@ func (s *chunkingWriter) Write(b []byte) (int, error) {
 	if s.buf.Len() < chunkSize {
 		return len(b), nil
 	}
-	fid, err := s.f.insertChunk(s.tempKey, s.chunks, s.buf.Next(chunkSize))
-	if err != nil {
-		if len(s.chunks.Chunks) > 1 {
-			s.f.deleteTemp(s.tempKey, s.chunks.Chunks)
-		}
+	if err := s.addChunk(s.buf.Next(chunkSize)); err != nil {
 		return 0, err
 	}
-	s.chunks.Chunks = append(s.chunks.Chunks, fid)
 	return len(b), nil
+}
+
+func (s *chunkingWriter) addChunk(b []byte) error {
+	fid, err := s.f.insertChunk(s.tempKey, s.chunks, b)
+	if err != nil {
+		if len(s.chunks) > 1 {
+			s.f.deleteTemp(s.tempKey, s.chunks)
+		}
+		return err
+	}
+	s.chunks = append(s.chunks, fid)
+	return nil
 }
 
 func (s *chunkingWriter) Close() error {
 	if s.buf.Len() == 0 {
 		return nil
 	}
-	fid, err := s.f.insertChunk(s.tempKey, s.chunks, s.buf.Bytes())
-	if err != nil {
-		if len(s.chunks.Chunks) > 1 {
-			s.f.deleteTemp(s.tempKey, s.chunks.Chunks)
-		}
-		return err
-	}
-	s.chunks.Chunks = append(s.chunks.Chunks, fid)
-	return nil
+	return s.addChunk(s.buf.Bytes())
 }
 
 func unlinkInode(tx *badger.Txn, inode uint64) error {
@@ -277,7 +280,7 @@ func linkInode(tx *badger.Txn, inode uint64) error {
 }
 
 // If we have inode with given checksumKey, unlink prev and link next.
-func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.DirectoryEntry) (bool, error) {
+func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next *pb.DirectoryEntry) (bool, error) {
 	var cv pb.ThisChecksum
 	found, err := getValueEx(tx, checksumKey, &cv)
 	if !found {
@@ -288,8 +291,8 @@ func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.Director
 	if prev.Inode != 0 {
 		if prev.Inode == cv.Hardlink {
 			// log.Infof("same inode detected, not linking")
-			if !proto.Equal(&prev, &next) {
-				if err := setValue(tx, permKey, &next); err != nil {
+			if !proto.Equal(prev, next) {
+				if err := setValue(tx, permKey, next); err != nil {
 					return false, err
 				}
 			}
@@ -306,7 +309,7 @@ func tryLink(tx *badger.Txn, permKey, checksumKey []byte, prev, next pb.Director
 		return false, err
 	}
 	next.Inode = cv.Hardlink
-	if err := setValue(tx, permKey, &next); err != nil {
+	if err := setValue(tx, permKey, next); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -336,7 +339,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 					return err
 				}
 				var err error
-				hardlinked, err = tryLink(tx, permKey, checksumKey, prev, dentryValue)
+				hardlinked, err = tryLink(tx, permKey, checksumKey, &prev, &dentryValue)
 				return err
 			})
 			if err != nil {
@@ -372,7 +375,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 	inodeValue := pb.Inode{
 		Size:       n,
 		InlineData: cw.inlineData,
-		Chunks:     cw.chunks.Chunks,
+		Chunks:     cw.chunks,
 	}
 
 	stDigests := hashes.Digests()
@@ -409,7 +412,7 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 			return nil
 		}
 
-		hardlinked, err = tryLink(tx, permKey, checksumKey, prev, dentryValue)
+		hardlinked, err = tryLink(tx, permKey, checksumKey, &prev, &dentryValue)
 		if err != nil {
 			return err
 		}
@@ -436,8 +439,13 @@ func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader
 		if err := setValue(tx, makeInodeKey(inode), &inodeValue); err != nil {
 			return err
 		}
-		ld := dentryValue
-		ld.Inode = inode
+
+		ld := pb.DirectoryEntry{
+			LastModifiedTimestamp: info.TimestampUnix,
+			ModuleType:            info.ModuleType,
+			Inode:                 inode,
+		}
+
 		if err := setValue(tx, permKey, &ld); err != nil {
 			return err
 		}
