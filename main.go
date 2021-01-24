@@ -7,7 +7,8 @@ import (
 	"git.sgu.ru/sgu/systemdutil"
 	"git.stingr.net/stingray/advfiler/badgerbackend"
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/dgraph-io/badger/v2"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3/options"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
@@ -30,7 +31,7 @@ type conf3 struct {
 }
 
 func badgerOpen(path, vpath string) (*badger.DB, error) {
-	opt := badger.DefaultOptions(path)
+	opt := badger.DefaultOptions(path).WithCompression(options.ZSTD).WithZSTDCompressionLevel(1)
 	if vpath != "" {
 		opt.ValueDir = vpath
 	}
