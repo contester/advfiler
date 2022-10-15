@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"os"
 
-	"git.sgu.ru/sgu/systemdutil"
-	"git.stingr.net/stingray/advfiler/badgerbackend"
+	"github.com/contester/advfiler/badgerbackend"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/dgraph-io/badger/v3/options"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
+	"stingr.net/go/systemdutil"
 
 	log "github.com/sirupsen/logrus"
 

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strconv"
 
-	"git.stingr.net/stingray/advfiler/common"
+	"github.com/contester/advfiler/common"
 )
 
 type metadataServer struct {

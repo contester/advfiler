@@ -13,9 +13,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
-	pb "git.stingr.net/stingray/advfiler/protos"
+	pb "github.com/contester/advfiler/protos"
 )
 
 var NotFound = errors.New("not found")

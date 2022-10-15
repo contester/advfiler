@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	pb "git.stingr.net/stingray/advfiler/protos"
+	pb "github.com/contester/advfiler/protos"
 )
 
 type AuthChecker struct {

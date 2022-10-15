@@ -1,4 +1,6 @@
-%global debug_package %{nil}
+%define debug_package %{nil}
+%global goipath github.com/contester/advfiler
+%global gomodulesmode GO111MODULE=auto
  
 Name:		contester-advfiler
 Version:	0.0.3
@@ -37,16 +39,13 @@ exit 0
 %setup -q
  
 %build
-mkdir -p goapp/bin goapp/src/git.stingr.net/stingray
-ln -s ${PWD} goapp/src/git.stingr.net/stingray/advfiler
-export GOPATH=${PWD}/goapp
-export GO111MODULE=off
-%gobuild -o goapp/bin/contester-advfiler git.stingr.net/stingray/advfiler
+%gobuild -o bin/contester-advfiler %{goipath}
+%gobuild -o bin/contester-advfiler-backup %{goipath}/backup
  
 %install
  
 %{__install} -d $RPM_BUILD_ROOT%{_bindir}
-%{__install} -v -D -t $RPM_BUILD_ROOT%{_bindir} goapp/bin/contester-advfiler
+%{__install} -v -D -t $RPM_BUILD_ROOT%{_bindir} bin/contester-advfiler bin/contester-advfiler-backup
 %{__install} -d $RPM_BUILD_ROOT%{_unitdir}
 %{__install} -v -D -t $RPM_BUILD_ROOT%{_unitdir} contester-advfiler.service
 %{__install} -v -D -t $RPM_BUILD_ROOT%{_unitdir} contester-advfiler.socket
@@ -57,6 +56,7 @@ export GO111MODULE=off
  
 %files
 %{_bindir}/contester-advfiler
+%{_bindir}/contester-advfiler-backup
 %dir %attr(-,%{name},%{name}) %{_sharedstatedir}/%{name}
 %{_unitdir}/contester-advfiler.service
 %{_unitdir}/contester-advfiler.socket

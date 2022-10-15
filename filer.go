@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"git.stingr.net/stingray/advfiler/common"
+	"github.com/contester/advfiler/common"
 	"google.golang.org/protobuf/proto"
 
-	pb "git.stingr.net/stingray/advfiler/protos"
+	pb "github.com/contester/advfiler/protos"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -198,6 +198,14 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	fi := common.FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 		Name:       path,
+	}
+	// First, look into content-length.
+	if ch := r.Header.Get("Content-Length"); ch != "" {
+		var err error
+		fi.ContentLength, err = strconv.ParseInt(ch, 10, 64)
+		if err != nil {
+			return err
+		}
 	}
 	if ch := r.Header.Get("X-Fs-Content-Length"); ch != "" {
 		var err error

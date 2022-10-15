@@ -3,7 +3,7 @@ package badgerbackend
 import (
 	"context"
 
-	"git.stingr.net/stingray/advfiler/common"
+	"github.com/contester/advfiler/common"
 	"github.com/dgraph-io/badger/v3"
 )
 
