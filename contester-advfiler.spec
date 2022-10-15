@@ -3,7 +3,7 @@
 %global gomodulesmode GO111MODULE=auto
  
 Name:		contester-advfiler
-Version:	0.0.3
+Version:	0.0.4
 Release:	1%{?dist}
 Summary:	Contester storage
  
@@ -64,6 +64,21 @@ exit 0
 %config(noreplace) %{_sysconfdir}/sysconfig/contester-advfiler
  
 %changelog
+* Sun Oct 16 2022 Paul Komkoff <i@stingr.net> 0.0.4-1
+- Add jenkinsfile (i@stingr.net)
+- Devendor and do a mass upgrade (i@stingr.net)
+- ... (i@stingr.net)
+- THis chunking code is awful (i@stingr.net)
+- fix vendoring (i@stingr.net)
+- WIp multibackend implementation (i@stingr.net)
+- ... vendor (i@stingr.net)
+- Update mods, deps, badger (i@stingr.net)
+- Mechanically remove snappy. (i@stingr.net)
+- Mechanically update to badger v2 (i@stingr.net)
+- mod updates (i@stingr.net)
+- Use standard logger in badgers (i@stingr.net)
+- Enable macos build (i@stingr.net)
+
 * Sun Oct 06 2019 Paul Komkoff <i@stingr.net> 0.0.3-1
 - Remove key not found logspam (i@stingr.net)
 
