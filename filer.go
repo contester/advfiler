@@ -483,20 +483,23 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path, err := f.urlToPath(r.URL.Path)
-	if err == nil {
-		ctx := r.Context()
-		switch r.Method {
-		case http.MethodPut, http.MethodPost:
-			err = f.handleUpload(ctx, w, r, path)
-		case http.MethodGet, http.MethodHead:
-			err = f.handleDownload(ctx, w, r, path)
-		case http.MethodDelete:
-			err = f.handleDelete(ctx, w, r, path)
-		default:
-			http.Error(w, "", http.StatusMethodNotAllowed)
-		}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ctx := r.Context()
+	switch r.Method {
+	case http.MethodPut, http.MethodPost:
+		err = f.handleUpload(ctx, w, r, path)
+	case http.MethodGet, http.MethodHead:
+		err = f.handleDownload(ctx, w, r, path)
+	case http.MethodDelete:
+		err = f.handleDelete(ctx, w, r, path)
+	default:
+		http.Error(w, "", http.StatusMethodNotAllowed)
 	}
 	if err != nil {
+		log.Errorf("%q: %v", path, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
