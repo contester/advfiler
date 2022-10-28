@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"google.golang.org/protobuf/proto"
+	"stingr.net/go/efstore/efcommon"
 
 	pb "github.com/contester/advfiler/protos"
 )
@@ -72,9 +73,9 @@ func CheckDigests(recv, computed map[string]string) bool {
 type DownloadResult interface {
 	Size() int64
 	ModuleType() string
-	Digests() *pb.Digests
+	Digests() efcommon.Digests
 	LastModifiedTimestamp() int64
-	Body() io.Reader
+	Body() io.ReadSeekCloser
 }
 
 type UploadStatus struct {

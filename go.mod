@@ -2,6 +2,8 @@ module github.com/contester/advfiler
 
 go 1.19
 
+replace stingr.net/go/efstore => ../efstore
+
 require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/dgraph-io/badger/v3 v3.2103.3
@@ -12,6 +14,8 @@ require (
 	google.golang.org/protobuf v1.28.1
 	stingr.net/go/systemdutil v0.0.0-20210311175859-735e4cc44e94
 )
+
+require golang.org/x/exp v0.0.0-20221028150844-83b7d23a625f // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -33,7 +37,9 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
+	github.com/syndtr/goleveldb v1.0.0
 	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/sys v0.0.0-20221013171732-95e765b1cc43 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
+	stingr.net/go/efstore v0.0.0-20221028185138-636fdf42bef5
 )
