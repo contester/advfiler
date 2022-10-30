@@ -28,7 +28,6 @@ func (f *Filer) Close() {
 }
 
 func (s *Filer) Upload(ctx context.Context, info common.FileInfo, body io.Reader) (common.UploadStatus, error) {
-
 	st, err := s.r.Upload(ctx, []byte(info.Name), efroot.FileInfo{
 		ContentLength: info.ContentLength,
 		ModuleType:    info.ModuleType,
@@ -56,7 +55,6 @@ func (f *Filer) Download(ctx context.Context, path string, options common.Downlo
 		return nil, err
 	}
 	return rr, nil
-
 }
 
 func (f *Filer) List(ctx context.Context, path string) ([]string, error) {
