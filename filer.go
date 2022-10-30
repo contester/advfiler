@@ -500,7 +500,6 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Errorf("%q: %v", path, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
