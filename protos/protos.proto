@@ -1,14 +1,8 @@
 syntax = "proto3";
 
-option go_package = ".;protos";
+option go_package = "github.com/contester/advfiler/protos";
 
 package protos;
-
-message FileChunk {
-    string fid = 1;
-    bytes sha1sum = 2;
-    int64 size = 3;
-}
 
 message Digests {
     bytes sha1 = 1;
@@ -16,42 +10,10 @@ message Digests {
     bytes sha256 = 3;
 };
 
-message FileInfo {
-    int64 size = 1;
+message FileMetadata {
+    string module_type = 1;
     Digests digests = 2;
-    string module_type = 3;
-    repeated FileChunk chunks = 4;
-}
-
-enum CompressionType {
-    CT_NONE = 0;
-    CT_SNAPPY = 1;
-}
-
-message DirectoryEntry {
-    uint64 inode = 1;
-    int64 last_modified_timestamp = 2;
-    string module_type = 3;
-}
-
-message Inode {
-    int64 size = 1;
-    Digests digests = 2;
-    bytes inline_data = 3;
-    repeated uint64 chunks = 4;
-    CompressionType compression = 5;
-}
-
-message ChunkList {
-    repeated uint64 chunks = 1;
-}
-
-message ThisChecksum {
-    uint64 hardlink = 1;
-}
-
-message InodeVolatileAttributes {
-    int64 reference_count_minus_1 = 1;
+    int64 timestamp_unix = 3;
 }
 
 enum AuthAction {

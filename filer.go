@@ -17,7 +17,6 @@ import (
 
 	"github.com/contester/advfiler/common"
 	"google.golang.org/protobuf/proto"
-	"stingr.net/go/efstore/efcommon"
 
 	pb "github.com/contester/advfiler/protos"
 	log "github.com/sirupsen/logrus"
@@ -146,14 +145,14 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		w.Header().Set("Last-Modified", t.UTC().Format(http.TimeFormat))
 	}
 	if r.Method == http.MethodHead {
-		addDigests(w.Header(), efcommon.DigestsToMap(result.Digests()))
+		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
 		return nil
 	}
 	if limitValue != -1 && limitValue < rsize {
 		w.Header().Add("X-Fs-Truncated", "true")
 		w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
 	} else {
-		addDigests(w.Header(), efcommon.DigestsToMap(result.Digests()))
+		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
 		w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
 	}
 

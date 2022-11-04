@@ -2,10 +2,6 @@ package common
 
 import (
 	"context"
-	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"hash"
@@ -14,9 +10,6 @@ import (
 	"sync"
 
 	"google.golang.org/protobuf/proto"
-	"stingr.net/go/efstore/efcommon"
-
-	pb "github.com/contester/advfiler/protos"
 )
 
 var NotFound = errors.New("not found")
@@ -41,26 +34,6 @@ func KVGetProto(ctx context.Context, kv GetKV, key string, value proto.Message) 
 	return proto.Unmarshal(res, value)
 }
 
-func maybeSetDigest(m map[string]string, name string, value []byte) {
-	if len(value) > 0 {
-		m[name] = base64.StdEncoding.EncodeToString(value)
-	}
-}
-
-func DigestsToMap(d *pb.Digests) map[string]string {
-	if d == nil {
-		return nil
-	}
-	r := make(map[string]string)
-	maybeSetDigest(r, "MD5", d.Md5)
-	maybeSetDigest(r, "SHA", d.Sha1)
-	maybeSetDigest(r, "SHA-256", d.Sha256)
-	if len(r) == 0 {
-		return nil
-	}
-	return r
-}
-
 func CheckDigests(recv, computed map[string]string) bool {
 	for k, v := range computed {
 		if prev, ok := recv[k]; ok && v != prev {
@@ -73,7 +46,7 @@ func CheckDigests(recv, computed map[string]string) bool {
 type DownloadResult interface {
 	Size() int64
 	ModuleType() string
-	Digests() efcommon.Digests
+	Digests() Digests
 	LastModifiedTimestamp() int64
 	Body() io.ReadSeekCloser
 }
@@ -94,22 +67,6 @@ func (s *Hashes) Write(p []byte) (n int, err error) {
 	}
 	s.Sha256.Write(p)
 	return s.Sha1.Write(p)
-}
-
-func (s *Hashes) Digests() *pb.Digests {
-	return &pb.Digests{
-		Md5:    s.Md5.Sum(nil),
-		Sha1:   s.Sha1.Sum(nil),
-		Sha256: s.Sha256.Sum(nil),
-	}
-}
-
-func NewHashes() *Hashes {
-	return &Hashes{
-		Sha1:   sha1.New(),
-		Md5:    md5.New(),
-		Sha256: sha256.New(),
-	}
 }
 
 type Backend interface {
@@ -170,12 +127,10 @@ type FileInfo struct {
 	ContentLength int64
 	ModuleType    string
 	RecvDigests   map[string]string
-	Compression   pb.CompressionType
 	TimestampUnix int64
 }
 
 type DownloadOptions struct {
-	AcceptCompression []pb.CompressionType
 }
 
 type DB interface {

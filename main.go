@@ -82,12 +82,12 @@ func (s *leveldbAdapter) Delete(key []byte) error {
 	return s.db.Delete(key, nil)
 }
 
-func (s *leveldbAdapter) Iterate(prefix []byte, f func(key []byte) error) error {
+func (s *leveldbAdapter) Iterate(prefix []byte, f func(key []byte, value func() []byte) error) error {
 	iter := s.db.NewIterator(util.BytesPrefix(prefix), nil)
 	defer iter.Release()
 
 	for iter.Next() {
-		if err := f(iter.Key()); err != nil {
+		if err := f(iter.Key(), iter.Value); err != nil {
 			return err
 		}
 	}
