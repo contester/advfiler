@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 
-	"github.com/contester/advfiler/badgerbackend"
 	"github.com/contester/advfiler/efbackend"
+	"github.com/contester/advfiler/ldbackend"
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/dgraph-io/badger/v3"
-	"github.com/dgraph-io/badger/v3/options"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -26,36 +23,14 @@ import (
 )
 
 type conf3 struct {
-	ListenHTTP             []string `envconfig:"LISTEN_HTTP"`
-	ManifestBadgerDB       string   `envconfig:"MANIFEST_BDB"`
-	ManifestBadgerDBValues string   `envconfig:"MANIFEST_BDB_VALUES"`
+	ListenHTTP []string `envconfig:"LISTEN_HTTP"`
+	ManifestDB string   `envconfig:"MANIFEST_DB"`
 
 	FilerDB    string `envconfig:"FILER_DB"`
 	FilerStore string `envconfig:"FILER_STORE"`
 
 	ValidAuthTokens []string `envconfig:"VALID_AUTH_TOKENS"`
 	EnableDebug     bool
-}
-
-func badgerOpen(path, vpath string) (*badger.DB, error) {
-	opt := badger.DefaultOptions(path).WithCompression(options.ZSTD).WithZSTDCompressionLevel(1)
-	if vpath != "" {
-		opt.ValueDir = vpath
-	}
-	opt.Logger = log.StandardLogger()
-
-	modBadgerOpts(&opt)
-
-	if err := os.MkdirAll(opt.Dir, os.ModePerm); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(opt.ValueDir, os.ModePerm); err != nil {
-		return nil, err
-	}
-
-	opt.SyncWrites = false
-
-	return badger.Open(opt)
 }
 
 func levelOpen(path string) (*leveldb.DB, error) {
@@ -117,11 +92,11 @@ func main() {
 
 	httpSockets = append(httpSockets, systemdutil.MustListenTCPSlice(config.ListenHTTP)...)
 
-	if config.ManifestBadgerDB == "" || config.FilerDB == "" {
+	if config.ManifestDB == "" || config.FilerDB == "" {
 		log.Fatal("database directories must be specified")
 	}
 
-	mbdb, err := badgerOpen(config.ManifestBadgerDB, config.ManifestBadgerDBValues)
+	mbdb, err := levelOpen(config.ManifestDB)
 	if err != nil {
 		log.Fatalf("can't open manifest db: %v", err)
 	}
@@ -148,7 +123,7 @@ func main() {
 	// }
 
 	f := NewFiler(fb, &authCheck)
-	ms := NewMetadataServer(badgerbackend.NewKV(mbdb, nil))
+	ms := NewMetadataServer(ldbackend.New(mbdb, nil))
 	http.Handle("/fs/", f)
 	http.HandleFunc("/fs2/", f.HandlePackage)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
@@ -158,8 +133,7 @@ func main() {
 	http.HandleFunc("/protopackage/", f.handleProtoPackage)
 	http.HandleFunc("/protopackage", f.handleProtoPackage)
 	systemdutil.ServeAll(nil, httpSockets, nil)
-	daemon.SdNotify(false, "READY=1")
+	daemon.SdNotify(false, daemon.SdNotifyReady)
+	defer daemon.SdNotify(false, daemon.SdNotifyStopping)
 	systemdutil.WaitSigint()
-	log.Infof("stopping")
-	daemon.SdNotify(false, "STOPPING=1")
 }
