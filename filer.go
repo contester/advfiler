@@ -151,23 +151,79 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 	}
 	if limitValue != -1 && limitValue < rsize {
 		w.Header().Add("X-Fs-Truncated", "true")
-		w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
+		// w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
 	} else {
 		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
-		w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
+		// w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
 	}
 
 	if limitValue == 0 {
 		return nil
 	}
 
-	var xr io.Reader = result.Body()
-	if limitValue != -1 {
-		xr = io.LimitReader(xr, limitValue)
+	var xr io.ReadSeeker = result.Body()
+	if limitValue != -1 && limitValue < rsize {
+		xr = &limitReadSeeker{r: xr, bytesTotal: limitValue, bytesRemaining: limitValue}
 	}
 
-	_, err = io.Copy(w, xr)
-	return err
+	http.ServeContent(w, r, "", time.Time{}, xr)
+	return nil
+}
+
+type limitReadSeeker struct {
+	r                          io.ReadSeeker
+	bytesTotal, bytesRemaining int64
+}
+
+func (s *limitReadSeeker) Read(p []byte) (n int, err error) {
+	if s.bytesRemaining <= 0 {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > s.bytesRemaining {
+		p = p[0:s.bytesRemaining]
+	}
+	n, err = s.r.Read(p)
+	s.bytesRemaining -= int64(n)
+	return
+}
+
+func (s *limitReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	default:
+		return 0, fmt.Errorf("invalid whence: %d", whence)
+	case io.SeekStart:
+		if offset > s.bytesTotal {
+			return 0, errors.New("invalid offset")
+		}
+		n, err := s.r.Seek(offset, whence)
+		if err != nil {
+			return 0, err
+		}
+		s.bytesRemaining = s.bytesTotal - n
+		return n, err
+	case io.SeekEnd:
+		offset += s.bytesTotal
+		if offset > s.bytesTotal {
+			return 0, errors.New("invalid offset")
+		}
+		n, err := s.r.Seek(offset, io.SeekStart)
+		if err != nil {
+			return 0, err
+		}
+		s.bytesRemaining = s.bytesTotal - n
+		return n, err
+	case io.SeekCurrent:
+		offset = s.bytesRemaining - offset
+		if offset < 0 {
+			return 0, errors.New("invalid offset")
+		}
+		n, err := s.r.Seek(offset, whence)
+		if err != nil {
+			return 0, err
+		}
+		s.bytesRemaining = s.bytesTotal - n
+		return n, err
+	}
 }
 
 func trimOr(s, prefix, what string) (string, error) {
