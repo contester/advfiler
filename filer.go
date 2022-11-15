@@ -370,12 +370,12 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
-	log.Infof("downloadAsset(%v)", name)
 	fr, err := f.backend.Download(ctx, name, common.DownloadOptions{})
 	if err != nil {
 		log.Infof("err: %v", err)
 		return nil, err
 	}
+	defer fr.Body().Close()
 	xr := pb.Asset{
 		Name:         as,
 		OriginalSize: fr.Size(),
@@ -383,6 +383,9 @@ func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit 
 	}
 	bb := make([]byte, int(limit))
 	n, err := fr.Body().Read(bb)
+	if err != nil {
+		return nil, err
+	}
 	bb = bb[:n]
 	xr.Data = append([]byte(nil), bb...)
 	return &xr, nil
