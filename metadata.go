@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
 
 	"github.com/contester/advfiler/common"
+	"stingr.net/go/efstore/efcommon"
 )
 
 type metadataServer struct {
@@ -143,7 +145,7 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
-		if err == common.NotFound {
+		if errors.Is(err, efcommon.ErrNotFound) {
 			http.NotFound(w, r)
 			return
 		}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/contester/advfiler/common"
 	"google.golang.org/protobuf/proto"
+	"stingr.net/go/efstore/efcommon"
 
 	pb "github.com/contester/advfiler/protos"
 	log "github.com/sirupsen/logrus"
@@ -128,7 +129,7 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 
 	result, err := f.backend.Download(ctx, path, common.DownloadOptions{})
 	if err != nil {
-		if errors.Is(err, common.NotFound) {
+		if errors.Is(err, common.ErrNotFound) {
 			http.NotFound(w, r)
 			return nil
 		}
@@ -533,6 +534,10 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 
 	b, err := proto.Marshal(&result)
 	if err != nil {
+		if errors.Is(err, efcommon.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

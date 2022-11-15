@@ -10,9 +10,8 @@ import (
 	"sync"
 
 	"google.golang.org/protobuf/proto"
+	"stingr.net/go/efstore/efcommon"
 )
-
-var NotFound = errors.New("not found")
 
 type GetKV interface {
 	Get(ctx context.Context, key string) ([]byte, error)
@@ -113,7 +112,7 @@ func (s *MultiBackend) List(ctx context.Context, path string) ([]string, error) 
 	var result []string
 	for _, v := range backends {
 		r, err := v.List(ctx, path)
-		if err != nil && err != NotFound {
+		if err != nil && !errors.Is(err, efcommon.ErrNotFound) {
 			return nil, err
 		}
 		result = append(result, r...)
