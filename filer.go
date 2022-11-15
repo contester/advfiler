@@ -372,7 +372,6 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
 	fr, err := f.backend.Download(ctx, name, common.DownloadOptions{})
 	if err != nil {
-		log.Infof("err: %v", err)
 		return nil, err
 	}
 	defer fr.Body().Close()
@@ -454,7 +453,6 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 		testList = append(testList, i)
 	}
 	sort.Slice(testList, func(i, j int) bool { return testList[i] < testList[j] })
-	log.Infof("test list: %v", testList)
 
 	for _, testID := range testList {
 		outName := "submit/" + contestID + "/" + submitID + "/" + testingID + "/" + strconv.FormatInt(testID, 10) + "/output"
@@ -480,8 +478,8 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Add("Content-Length", strconv.FormatInt(int64(len(b)), 10))
-	w.Write(b)
+
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
