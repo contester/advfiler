@@ -90,7 +90,17 @@ func (f *metadataServer) getK(ctx context.Context, pk problemKey) ([]problemMani
 			result = append(result, m)
 		}
 	}
-	sort.Sort(byIdRev(result))
+	sort.Slice(result, func(i, j int) bool {
+		a := result[i].Id
+		b := result[j].Id
+		if a < b {
+			return true
+		}
+		if a > b {
+			return false
+		}
+		return result[i].Revision > result[j].Revision
+	})
 	return result, nil
 }
 
@@ -99,20 +109,6 @@ func (f *metadataServer) buildKeys(ctx context.Context, pk problemKey) ([]string
 		return []string{revKey(pk.Id, pk.Revision)}, nil
 	}
 	return f.kv.List(ctx, pk.Id)
-}
-
-type byIdRev []problemManifest
-
-func (s byIdRev) Len() int      { return len(s) }
-func (s byIdRev) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-func (s byIdRev) Less(i, j int) bool {
-	if s[i].Id < s[j].Id {
-		return true
-	}
-	if s[j].Id > s[j].Id {
-		return false
-	}
-	return s[i].Revision > s[j].Revision
 }
 
 func getRequestProblemKey(r *http.Request) (problemKey, error) {
