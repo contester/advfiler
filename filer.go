@@ -128,12 +128,13 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 
 	result, err := f.backend.Download(ctx, path, common.DownloadOptions{})
 	if err != nil {
-		if err == common.NotFound {
+		if errors.Is(err, common.NotFound) {
 			http.NotFound(w, r)
 			return nil
 		}
 		return err
 	}
+	defer result.Body().Close()
 
 	rsize := result.Size()
 	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(rsize, 10))
@@ -301,6 +302,7 @@ func (f *filerServer) writeRemoteFileAs(ctx context.Context, wr func(result comm
 	if err != nil {
 		return err
 	}
+	defer result.Body().Close()
 	return wr(result, as)
 }
 
