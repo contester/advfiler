@@ -2,7 +2,6 @@ package main // import "git.stingr.net/stingray/advfiler"
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/contester/advfiler/efbackend"
@@ -13,7 +12,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"golang.org/x/net/trace"
-	"stingr.net/go/efstore/efcommon"
 	"stingr.net/go/efstore/efroot"
 	"stingr.net/go/systemdutil"
 
@@ -42,11 +40,7 @@ type leveldbAdapter struct {
 }
 
 func (s *leveldbAdapter) Get(key []byte) ([]byte, error) {
-	r, err := s.db.Get(key, nil)
-	if err != nil && errors.Is(err, leveldb.ErrNotFound) {
-		err = efcommon.ErrNotFound
-	}
-	return r, err
+	return s.db.Get(key, nil)
 }
 
 func (s *leveldbAdapter) Put(key, value []byte) error {
