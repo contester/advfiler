@@ -17,6 +17,7 @@ import (
 
 	"github.com/contester/advfiler/common"
 	"google.golang.org/protobuf/proto"
+	"stingr.net/go/efstore/efcommon"
 
 	pb "github.com/contester/advfiler/protos"
 	log "github.com/sirupsen/logrus"
@@ -128,12 +129,13 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 
 	result, err := f.backend.Download(ctx, path, common.DownloadOptions{})
 	if err != nil {
-		if err == common.NotFound {
+		if errors.Is(err, common.ErrNotFound) {
 			http.NotFound(w, r)
 			return nil
 		}
 		return err
 	}
+	defer result.Body().Close()
 
 	rsize := result.Size()
 	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(rsize, 10))
@@ -150,23 +152,79 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 	}
 	if limitValue != -1 && limitValue < rsize {
 		w.Header().Add("X-Fs-Truncated", "true")
-		w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
+		// w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
 	} else {
 		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
-		w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
+		// w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
 	}
 
 	if limitValue == 0 {
 		return nil
 	}
 
-	var xr io.Reader = result.Body()
-	if limitValue != -1 {
-		xr = io.LimitReader(xr, limitValue)
+	var xr io.ReadSeeker = result.Body()
+	if limitValue != -1 && limitValue < rsize {
+		xr = &limitReadSeeker{r: xr, bytesTotal: limitValue, bytesRemaining: limitValue}
 	}
 
-	_, err = io.Copy(w, xr)
-	return err
+	http.ServeContent(w, r, "", time.Time{}, xr)
+	return nil
+}
+
+type limitReadSeeker struct {
+	r                          io.ReadSeeker
+	bytesTotal, bytesRemaining int64
+}
+
+func (s *limitReadSeeker) Read(p []byte) (n int, err error) {
+	if s.bytesRemaining <= 0 {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > s.bytesRemaining {
+		p = p[0:s.bytesRemaining]
+	}
+	n, err = s.r.Read(p)
+	s.bytesRemaining -= int64(n)
+	return
+}
+
+func (s *limitReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	default:
+		return 0, fmt.Errorf("invalid whence: %d", whence)
+	case io.SeekStart:
+		if offset > s.bytesTotal {
+			return 0, errors.New("invalid offset")
+		}
+		n, err := s.r.Seek(offset, whence)
+		if err != nil {
+			return 0, err
+		}
+		s.bytesRemaining = s.bytesTotal - n
+		return n, err
+	case io.SeekEnd:
+		offset += s.bytesTotal
+		if offset > s.bytesTotal {
+			return 0, errors.New("invalid offset")
+		}
+		n, err := s.r.Seek(offset, io.SeekStart)
+		if err != nil {
+			return 0, err
+		}
+		s.bytesRemaining = s.bytesTotal - n
+		return n, err
+	case io.SeekCurrent:
+		offset = s.bytesRemaining - offset
+		if offset < 0 {
+			return 0, errors.New("invalid offset")
+		}
+		n, err := s.r.Seek(offset, whence)
+		if err != nil {
+			return 0, err
+		}
+		s.bytesRemaining = s.bytesTotal - n
+		return n, err
+	}
 }
 
 func trimOr(s, prefix, what string) (string, error) {
@@ -301,6 +359,7 @@ func (f *filerServer) writeRemoteFileAs(ctx context.Context, wr func(result comm
 	if err != nil {
 		return err
 	}
+	defer result.Body().Close()
 	return wr(result, as)
 }
 
@@ -370,12 +429,11 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
-	log.Infof("downloadAsset(%v)", name)
 	fr, err := f.backend.Download(ctx, name, common.DownloadOptions{})
 	if err != nil {
-		log.Infof("err: %v", err)
 		return nil, err
 	}
+	defer fr.Body().Close()
 	xr := pb.Asset{
 		Name:         as,
 		OriginalSize: fr.Size(),
@@ -383,6 +441,9 @@ func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit 
 	}
 	bb := make([]byte, int(limit))
 	n, err := fr.Body().Read(bb)
+	if err != nil {
+		return nil, err
+	}
 	bb = bb[:n]
 	xr.Data = append([]byte(nil), bb...)
 	return &xr, nil
@@ -451,7 +512,6 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 		testList = append(testList, i)
 	}
 	sort.Slice(testList, func(i, j int) bool { return testList[i] < testList[j] })
-	log.Infof("test list: %v", testList)
 
 	for _, testID := range testList {
 		outName := "submit/" + contestID + "/" + submitID + "/" + testingID + "/" + strconv.FormatInt(testID, 10) + "/output"
@@ -474,11 +534,15 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 
 	b, err := proto.Marshal(&result)
 	if err != nil {
+		if errors.Is(err, efcommon.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Add("Content-Length", strconv.FormatInt(int64(len(b)), 10))
-	w.Write(b)
+
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 }
 
 func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {

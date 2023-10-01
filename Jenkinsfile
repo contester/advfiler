@@ -52,7 +52,7 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'stingrNETrepo', usernameVariable: 'repo_user', passwordVariable: 'repo_pass')]) {
-                        response = sh(script: "curl -o /dev/null -w '%{http_code}' http://stingr.net:8284/upload/ --user ${repo_user}:${repo_pass} --upload-file ${BUILD_DIR}/x86_64/contester-advfiler-0.*.x86_64.rpm", returnStdout: true)
+                        response = sh(script: "curl -o /dev/null -w '%{http_code}' http://repo.stingr.net:8284/upload/ --user ${repo_user}:${repo_pass} --upload-file ${BUILD_DIR}/x86_64/contester-advfiler-0.*.x86_64.rpm", returnStdout: true)
                     }
 
                     if (response != "200") {
