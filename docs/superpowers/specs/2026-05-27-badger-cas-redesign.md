@@ -12,14 +12,32 @@ This redesign keeps Badger's crash resilience and simplicity while adding a clea
 
 ### Single Badger DB
 
-One `*badger.DB` instance for everything. Key prefix namespaces:
+One `*badger.DB` instance for everything. Compound keys using `\x00` as delimiter (paths never contain null bytes).
 
-| Prefix | Key | Value |
-|--------|-----|-------|
-| `0x01` | path | `DirectoryEntry` proto |
-| `0x02` | blake3-256 hash (32 bytes) | raw file bytes |
-| `0x03` | blake3-256 hash (32 bytes) | `HashEntry` proto |
-| `0x04` | manifest key (string) | JSON blob (problem manifests) |
+### Key Layout
+
+**Directory entries (`0x01` prefix):**
+
+| Key | Value |
+|-----|-------|
+| `0x01` + path + `\x00\x00` | raw file bytes (zero-copy servable, present only when inline) |
+| `0x01` + path + `\x00\x01` | `DirectoryEntry` proto (metadata) |
+
+**Content blobs (`0x02` prefix, keyed by blake3-256 hash):**
+
+| Key | Value |
+|-----|-------|
+| `0x02` + hash(32) + `\x00` | raw file bytes (zero-copy servable) |
+| `0x02` + hash(32) + `\x01` | `Digests` proto (SHA1, MD5, SHA256; blake3 is implicit from key) |
+| `0x02` + hash(32) + `\x02` | `HashEntry` proto |
+
+All three sub-keys share the 33-byte prefix, enabling Badger key prefix compression.
+
+**Problem manifests (`0x04` prefix):**
+
+| Key | Value |
+|-----|-------|
+| `0x04` + manifest key | JSON blob |
 
 ### DirectoryEntry proto
 
@@ -28,32 +46,40 @@ message DirectoryEntry {
     bytes blake3_hash = 1;
     string module_type = 2;
     int64 last_modified_timestamp = 3;
-    Digests digests = 4;       // SHA1, MD5, SHA256 for HTTP Digest headers
-    bytes inline_data = 5;     // non-empty when content is stored inline
+    Digests digests = 4;        // present when inline, wiped on externalization
+    int64 data_size = 5;
+    bool external = 6;
 }
 ```
 
-When `inline_data` is set, the content lives in this entry. When empty, the content is in the blob at `0x02` + `blake3_hash`.
+The `blake3_hash` is always stored for CAS lookup and integrity. When `external` is false, raw data lives at `0x01` + path + `\x00\x00` and digests are in this entry. When `external` is true, raw data lives at `0x02` + hash + `\x00` and digests are at `0x02` + hash + `\x01`.
 
-The `blake3_hash` is always stored (regardless of inline/external) for integrity verification and CAS lookup.
+On externalization, `digests` is cleared from the DirectoryEntry (moved to the shared `0x02` + hash + `\x01` entry) to avoid duplication across all referencing paths.
 
 ### HashEntry proto
 
 ```proto
 message HashEntry {
-    int64 data_size = 1;
-    repeated string paths = 2;   // tracked while content is inline
-    int64 refcount = 3;          // used after externalization (paths is empty)
+    oneof state {
+        PathList inline_paths = 1;
+        int64 refcount = 2;
+    }
+}
+
+message PathList {
+    repeated string paths = 1;
 }
 ```
 
 Two states:
-- **Pre-externalization**: `paths` lists all directory entry paths with this content stored inline. `refcount` is 0 (implicit from `len(paths)`).
-- **Post-externalization**: `paths` is empty. `refcount` tracks the number of directory entries referencing the external blob.
+- **Pre-externalization** (`inline_paths`): lists all directory entry paths with this content stored inline.
+- **Post-externalization** (`refcount`): counts directory entries referencing the external blob.
+
+No `data_size` — callers know the size from the buffered upload body or the `DirectoryEntry.data_size` field.
 
 ### Inline vs External Decision
 
-Directory entries always store the blake3 hash. The per-entry cost difference between inline and external is the `data_size` bytes of inline content. Externalizing N copies saves `(N-1) * data_size` bytes but costs a fixed blob overhead `B` (blob Badger entry: key + metadata, approximately 50 bytes).
+Directory entries always store the blake3 hash. The per-entry cost difference between inline and external is the `data_size` bytes of inline content. Externalizing N copies saves `(N-1) * data_size` bytes but costs a fixed blob overhead `B` (blob Badger entry for `0x02` key + digests entry + HashEntry conversion, approximately 50 bytes).
 
 **Externalize when**: `(N-1) * data_size > B`
 
@@ -63,19 +89,19 @@ Examples (B=50):
 - 2-byte value: externalize at N=26 (savings: 50 > 50)
 - 1-byte value: externalize at N=51
 
-The path list in `HashEntry` is bounded by `B / data_size + 1` entries. Worst case is ~50 entries for 1-byte values.
+The path list in `HashEntry` is bounded by `B / data_size + 1` entries. Worst case is ~50 entries for 1-byte values. After externalization the list is replaced by a refcount integer.
 
 ## Operations
 
 ### Upload
 
-1. **Buffer body in memory**, computing blake3-256 (plus SHA1, MD5, SHA256 for digest headers) as data streams in.
-2. **If hash was provided in HTTP header**: compare against computed hash. Reject with error if mismatch (transit corruption).
-3. **Look up `0x03` + hash**:
-   - **Not found** (first upload of this content): create `HashEntry{data_size, paths: [this_path]}`, write `DirectoryEntry` with inline data. Single `db.Update` transaction.
-   - **Found, pre-externalization** (paths list): add this path to the list. Check break-even. If threshold met: write blob to `0x02`, rewrite ALL listed directory entries from inline→reference, convert `HashEntry` to refcount mode. If threshold not met: write `DirectoryEntry` with inline data, update paths list. Single `db.Update` transaction.
-   - **Found, post-externalization** (refcount): increment refcount, write `DirectoryEntry` with hash reference (no inline data). Content blob already exists. Single `db.Update` transaction.
-4. **If overwriting an existing path**: handle the old content's hash — decrement its refcount or remove from its paths list (see Delete logic, applied inline within the upload transaction).
+1. **Buffer body in memory**, computing blake3-256 (plus SHA1, MD5, SHA256 for HTTP digest headers) as data streams in.
+2. **If hash was provided in HTTP header** (e.g., `X-Blake3-Hash`): compare against computed hash. Reject with error if mismatch (transit corruption).
+3. **If overwriting an existing path**: handle the old content's hash within the same transaction (decrement refcount or remove from paths list — see Delete logic below).
+4. **Look up `0x02` + hash + `\x02`** (HashEntry):
+   - **Not found** (first upload of this content): write `HashEntry{inline_paths: [this_path]}`, write raw data to `0x01` + path + `\x00\x00`, write `DirectoryEntry` (inline, with digests) to `0x01` + path + `\x00\x01`. Single `db.Update` transaction.
+   - **Found, pre-externalization** (`inline_paths`): add this path to the list. Check break-even. If threshold met: write blob to `0x02` + hash + `\x00`, write digests to `0x02` + hash + `\x01`, rewrite ALL listed directory entries (set `external=true`, clear digests, delete their `\x00\x00` raw data keys), convert `HashEntry` to `refcount` mode. If threshold not met: write raw data to `0x01` + path + `\x00\x00`, write `DirectoryEntry` with inline data, update paths list. Single `db.Update` transaction.
+   - **Found, post-externalization** (`refcount`): increment refcount, write `DirectoryEntry` (external, no digests, no raw data key). Content blob already exists. Single `db.Update` transaction.
 
 ### Download
 
@@ -83,38 +109,40 @@ Single `db.View` transaction, zero-copy serving:
 
 ```go
 db.View(func(tx *badger.Txn) error {
-    // 1. Get DirectoryEntry at 0x01 + path
-    // 2. Extract metadata (size, module_type, digests, timestamp)
-    // 3. If inline_data is set:
-    //      http.ServeContent(w, r, "", modTime, bytes.NewReader(entry.InlineData))
-    // 4. If external:
-    //      contentItem, _ := tx.Get(0x02 + entry.Blake3Hash)
-    //      contentItem.Value(func(v []byte) error {
-    //          http.ServeContent(w, r, "", modTime, bytes.NewReader(v))
-    //          return nil
-    //      })
+    // 1. Get DirectoryEntry at 0x01 + path + \x00\x01
+    // 2. Extract metadata (data_size, module_type, timestamp)
+    // 3a. If inline (external == false):
+    //       digests from DirectoryEntry
+    //       dataItem := tx.Get(0x01 + path + \x00\x00)
+    // 3b. If external:
+    //       digests from tx.Get(0x02 + hash + \x01)
+    //       dataItem := tx.Get(0x02 + hash + \x00)
+    // 4. dataItem.Value(func(v []byte) error {
+    //        http.ServeContent(w, r, "", modTime, bytes.NewReader(v))
+    //        return nil
+    //    })
 })
 ```
 
-The read transaction stays open during HTTP serving. Acceptable for contest workloads (fast local clients, files < 128MB).
+Both inline and external paths use the same zero-copy `item.Value` pattern. The read transaction stays open during HTTP serving. Acceptable for contest workloads (fast local clients, files < 128MB).
 
 ### Delete
 
 Single `db.Update` transaction:
 
-1. Get `DirectoryEntry` at `0x01` + path. Extract hash.
-2. Look up `0x03` + hash:
-   - **Pre-externalization**: remove this path from list. If list empty, delete `0x03` entry.
-   - **Post-externalization**: decrement refcount. If zero, delete `0x02` blob and `0x03` entry.
-3. Delete `0x01` + path.
+1. Get `DirectoryEntry` at `0x01` + path + `\x00\x01`. Extract hash.
+2. Look up `0x02` + hash + `\x02` (HashEntry):
+   - **Pre-externalization** (`inline_paths`): remove this path from list. If list empty, delete `0x02` + hash + `\x02`.
+   - **Post-externalization** (`refcount`): decrement. If zero, delete `0x02` + hash + `\x00` (blob), `0x02` + hash + `\x01` (digests), and `0x02` + hash + `\x02` (HashEntry).
+3. Delete `0x01` + path + `\x00\x00` (raw data, if inline) and `0x01` + path + `\x00\x01` (metadata).
 
 ### List
 
-Badger prefix iterator over `0x01` + prefix with `PrefetchValues: false` (keys only). Strip the prefix byte from returned keys.
+Badger prefix iterator over `0x01` + prefix with `PrefetchValues: false`. For each key, check that it ends with `\x00\x01` (metadata sub-key). Extract path as the bytes between the leading `0x01` and the trailing `\x00\x01`.
 
 ### Wipe
 
-Iterate all `0x01` entries, delete each (with proper refcount/hash cleanup). Or, since this is a full wipe, just drop all prefixes.
+Iterate all `0x01` entries ending in `\x00\x01`, delete each via the Delete flow. Or for a full wipe, iterate all key prefixes and delete everything.
 
 ## Architecture
 
@@ -131,6 +159,7 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 func (s *Store) Download(ctx context.Context, path string, fn func(DownloadResult) error) error
 func (s *Store) List(ctx context.Context, prefix string) ([]string, error)
 func (s *Store) Delete(ctx context.Context, path string) error
+func (s *Store) Wipe(ctx context.Context) error
 func (s *Store) Close()
 
 // Manifest methods (problem metadata)
@@ -139,34 +168,32 @@ func (s *Store) SetManifest(ctx context.Context, key string, value []byte) error
 func (s *Store) ListManifests(ctx context.Context, prefix string) ([]string, error)
 ```
 
-`Download` is callback-based: the `DownloadResult` is valid only inside the callback (tied to the Badger read transaction lifetime).
+`Download` is callback-based: `DownloadResult` is valid only inside the callback (tied to the Badger read transaction lifetime).
 
 ```go
 type DownloadResult struct {
     Size                 int64
     ModuleType           string
-    Digests              Digests
     LastModifiedTimestamp int64
+    Digests              Digests
     Body                 io.ReadSeeker
 }
 ```
 
 ### Upload Pre-check with Provided Hash
 
-When the client sends a blake3 hash in the HTTP request header (e.g., `X-Blake3-Hash`), the upload can short-circuit:
+When the client sends a blake3 hash in the HTTP request header (e.g., `X-Blake3-Hash`):
 
-1. Look up the hash before reading the body.
-2. If content exists and overwrite semantics allow hardlink: still read and verify the body (reject on mismatch), but skip writing the blob.
-3. If content is new: proceed normally.
-
-This enables clients that already know the hash to signal intent early, while always verifying integrity.
+1. Look up the hash before reading the body — know storage disposition in advance.
+2. Read and hash the body regardless. Reject if computed hash doesn't match declared hash (transit corruption).
+3. Proceed with CAS logic as normal.
 
 ### Package Layout
 
 ```
 advfiler/
   main.go              — config, HTTP wiring, Badger open/close
-  store.go             — Store struct, Upload/Download/Delete/List/manifest methods
+  store.go             — Store struct, Upload/Download/Delete/List/Wipe/manifest methods
   filer.go             — HTTP handlers for /fs/, /tar/, /fs2/, /protopackage/, /wipe/
   metadata.go          — HTTP handlers for /problem/get/, /problem/set/
   authchecker.go       — bearer token auth (unchanged)
@@ -175,7 +202,7 @@ advfiler/
   backup/              — CLI backup tool (unchanged)
 ```
 
-The `common/`, `efbackend/`, `ldbackend/` packages are eliminated. Hash utilities move to the main package or a small `hashes.go` file.
+The `common/`, `efbackend/`, `ldbackend/` packages are eliminated.
 
 ### Filer.go Changes
 
@@ -185,7 +212,7 @@ HTTP handlers call `Store` methods directly. Key changes from current code:
 - `handleUpload`: passes request body to `store.Upload`, which handles buffering and CAS internally.
 - `handleTarUpload`/`handleTarDownload`: same pattern, iterating entries.
 - `downloadAsset`, `handleProtoPackage`, `HandlePackage`, `writeRemoteFileAs`: adapted to callback-based download.
-- `handleWipe`: calls `store.Wipe()` or iterates `store.List` + `store.Delete`.
+- `handleWipe`: calls `store.Wipe()`.
 
 ### MetadataServer Changes
 
@@ -211,13 +238,19 @@ message DirectoryEntry {
     string module_type = 2;
     int64 last_modified_timestamp = 3;
     Digests digests = 4;
-    bytes inline_data = 5;
+    int64 data_size = 5;
+    bool external = 6;
+}
+
+message PathList {
+    repeated string paths = 1;
 }
 
 message HashEntry {
-    int64 data_size = 1;
-    repeated string paths = 2;
-    int64 refcount = 3;
+    oneof state {
+        PathList inline_paths = 1;
+        int64 refcount = 2;
+    }
 }
 
 enum AuthAction {
@@ -247,7 +280,7 @@ message TestingRecord {
 }
 ```
 
-Removed: `FileMetadata`, `FileInfo`, `FileChunk`, `Inode`, `ChunkList`, `ThisChecksum`, `InodeVolatileAttributes`, `CompressionType`.
+Removed from old versions: `FileMetadata`, `FileInfo`, `FileChunk`, `Inode`, `ChunkList`, `ThisChecksum`, `InodeVolatileAttributes`, `CompressionType`.
 
 ## Dependencies
 
@@ -287,19 +320,19 @@ Fresh deployment. No migration from existing LevelDB/efstore data needed.
 
 ## Bug Fixes Ported from Efstore Branch
 
-The following fixes from the efstore branch apply to `filer.go` and `metadata.go` regardless of backend:
+The following fixes from the efstore branch apply to `filer.go` and `metadata.go` regardless of backend. They will be incorporated during the handler rewrite:
 
-1. **downloadAsset leak** (4f851f7): add `defer fr.Body().Close()`, error check after Read
-2. **handleDownload/writeRemoteFileAs leaks** (1ea16e5): add `defer result.Body().Close()`, use `errors.Is()`
+1. **downloadAsset leak** (4f851f7): missing body close and error check after Read
+2. **handleDownload/writeRemoteFileAs leaks** (1ea16e5): missing body close, `errors.Is()` for error checks
 3. **ServeContent for proto packages** (c888a31): use `http.ServeContent` instead of raw `w.Write`
 4. **limitReadSeeker** (5222504): replace `io.LimitReader`/`io.Copy` with `http.ServeContent` + seekable reader
 5. **Double error write** (384bf54): remove `http.Error` after `log.Errorf` when response already written
 6. **sort.Slice** (f09c4cf): replace sort.Interface boilerplate
 
-These will be applied during implementation since the handler code is being rewritten to use callback-based download.
+With callback-based download (no Close needed — lifetime tied to transaction), leak fixes 1-2 are structurally eliminated. The limitReadSeeker is still needed for `X-Fs-Limit` support but operates on the `io.ReadSeeker` body within the callback.
 
 ## GC
 
-Badger's value log GC runs periodically (the old code ran it every 60 minutes at 50% threshold). The new code should do the same via a background goroutine in `Store`.
+Badger's value log GC runs periodically (the old code ran it hourly at 50% threshold). The new code should do the same via a background goroutine in `Store`.
 
 No application-level GC is needed — refcount management is transactional and inline with upload/delete operations.
