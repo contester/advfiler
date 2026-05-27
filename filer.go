@@ -5,26 +5,22 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/contester/advfiler/common"
 	"google.golang.org/protobuf/proto"
-	"stingr.net/go/efstore/efcommon"
 
 	pb "github.com/contester/advfiler/protos"
 	log "github.com/sirupsen/logrus"
-)
-
-var (
-	_ = log.Info
 )
 
 type AuthCheck interface {
@@ -32,14 +28,14 @@ type AuthCheck interface {
 }
 
 type filerServer struct {
-	backend     common.Backend
+	store       *Store
 	urlPrefix   string
 	authChecker AuthCheck
 }
 
-func NewFiler(backend common.Backend, authCheck AuthCheck) *filerServer {
+func NewFiler(store *Store, authCheck AuthCheck) *filerServer {
 	return &filerServer{
-		backend:     backend,
+		store:       store,
 		urlPrefix:   "/fs/",
 		authChecker: authCheck,
 	}
@@ -54,33 +50,10 @@ func tokenFromHeader(req *http.Request) string {
 
 var errUnauthorized = errors.New("unauthorized")
 
-func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
-	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, path); !v {
-		return errUnauthorized
+func addDigestsToHeader(h http.Header, digests map[string]string) {
+	if len(digests) == 0 {
+		return
 	}
-	names, err := f.backend.List(ctx, path)
-	if err != nil {
-		return err
-	}
-	sort.Strings(names)
-	var buf bytes.Buffer
-
-	for _, v := range names {
-		buf.WriteString(v)
-		buf.WriteByte('\n')
-	}
-
-	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(buf.Bytes()))
-
-	/*var wr fileList
-	for _, v := range names {
-		wr.Entries = append(wr.Entries, listFileEntry{Name: v})
-	}
-	return json.NewEncoder(w).Encode(&wr)*/
-	return nil
-}
-
-func addDigests(h http.Header, digests map[string]string) {
 	dkeys := make([]string, 0, len(digests))
 	for k := range digests {
 		dkeys = append(dkeys, k)
@@ -109,6 +82,24 @@ func parseDigests(dh string) map[string]string {
 	return result
 }
 
+func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
+	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, path); !v {
+		return errUnauthorized
+	}
+	names, err := f.store.List(ctx, path)
+	if err != nil {
+		return err
+	}
+	sort.Strings(names)
+	var buf bytes.Buffer
+	for _, v := range names {
+		buf.WriteString(v)
+		buf.WriteByte('\n')
+	}
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(buf.Bytes()))
+	return nil
+}
+
 func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if path == "" || path[len(path)-1] == '/' {
 		return f.handleList(ctx, w, r, path)
@@ -127,48 +118,39 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 		limitValue = lv
 	}
 
-	result, err := f.backend.Download(ctx, path, common.DownloadOptions{})
-	if err != nil {
-		if errors.Is(err, common.ErrNotFound) {
-			http.NotFound(w, r)
+	return f.store.Download(ctx, path, func(result DownloadResult) error {
+		rsize := result.Size
+		w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(rsize, 10))
+		if result.ModuleType != "" {
+			w.Header().Add("X-Fs-Module-Type", result.ModuleType)
+		}
+		if result.LastModifiedTimestamp != 0 {
+			t := time.Unix(result.LastModifiedTimestamp, 0)
+			w.Header().Set("Last-Modified", t.UTC().Format(http.TimeFormat))
+		}
+
+		digestMap := DigestsToMap(result.Digests)
+
+		if r.Method == http.MethodHead {
+			addDigestsToHeader(w.Header(), digestMap)
 			return nil
 		}
-		return err
-	}
-	defer result.Body().Close()
+		if limitValue != -1 && limitValue < rsize {
+			w.Header().Add("X-Fs-Truncated", "true")
+		} else {
+			addDigestsToHeader(w.Header(), digestMap)
+		}
+		if limitValue == 0 {
+			return nil
+		}
 
-	rsize := result.Size()
-	w.Header().Add("X-Fs-Content-Length", strconv.FormatInt(rsize, 10))
-	if m := result.ModuleType(); m != "" {
-		w.Header().Add("X-Fs-Module-Type", m)
-	}
-	if lm := result.LastModifiedTimestamp(); lm != 0 {
-		t := time.Unix(lm, 0)
-		w.Header().Set("Last-Modified", t.UTC().Format(http.TimeFormat))
-	}
-	if r.Method == http.MethodHead {
-		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
+		var xr io.ReadSeeker = result.Body
+		if limitValue != -1 && limitValue < rsize {
+			xr = &limitReadSeeker{r: xr, bytesTotal: limitValue, bytesRemaining: limitValue}
+		}
+		http.ServeContent(w, r, "", time.Time{}, xr)
 		return nil
-	}
-	if limitValue != -1 && limitValue < rsize {
-		w.Header().Add("X-Fs-Truncated", "true")
-		// w.Header().Add("Content-Length", strconv.FormatInt(limitValue, 10))
-	} else {
-		addDigests(w.Header(), common.DigestsToMap(result.Digests()))
-		// w.Header().Add("Content-Length", strconv.FormatInt(rsize, 10))
-	}
-
-	if limitValue == 0 {
-		return nil
-	}
-
-	var xr io.ReadSeeker = result.Body()
-	if limitValue != -1 && limitValue < rsize {
-		xr = &limitReadSeeker{r: xr, bytesTotal: limitValue, bytesRemaining: limitValue}
-	}
-
-	http.ServeContent(w, r, "", time.Time{}, xr)
-	return nil
+	})
 }
 
 type limitReadSeeker struct {
@@ -239,7 +221,7 @@ func (f *filerServer) urlToPath(urlpath string) (string, error) {
 }
 
 func (f *filerServer) handleDelete(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
-	return f.backend.Delete(ctx, path)
+	return f.store.Delete(ctx, path)
 }
 
 func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
@@ -253,11 +235,10 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 		return errUnauthorized
 	}
 
-	fi := common.FileInfo{
+	fi := FileInfo{
 		ModuleType: r.Header.Get("X-Fs-Module-Type"),
 		Name:       path,
 	}
-	// First, look into content-length.
 	if ch := r.Header.Get("Content-Length"); ch != "" {
 		var err error
 		fi.ContentLength, err = strconv.ParseInt(ch, 10, 64)
@@ -277,8 +258,11 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 	if ch := r.Header.Get("Content-MD5"); ch != "" {
 		fi.RecvDigests["MD5"] = ch
 	}
+	if bh := r.Header.Get("X-Blake3-Hash"); bh != "" {
+		fi.Blake3Hash, _ = base64.StdEncoding.DecodeString(bh)
+	}
 
-	result, err := f.backend.Upload(ctx, fi, r.Body)
+	result, err := f.store.Upload(ctx, fi, r.Body)
 	if err != nil {
 		return err
 	}
@@ -306,71 +290,60 @@ func (f *filerServer) handleMultiDownload(ctx context.Context, w http.ResponseWr
 	}
 	cout := zip.NewWriter(w)
 	defer cout.Close()
-	wr := writeToZip(cout)
 	for _, entry := range mdreq.Entry {
-		f.writeRemoteFileAs(ctx, wr, entry.Source, entry.Destination)
+		f.writeRemoteFileAs(ctx, cout, nil, entry.Source, entry.Destination)
 	}
 	return nil
 }
 
-func writeToZip(w *zip.Writer) func(result common.DownloadResult, as string) error {
-	return func(result common.DownloadResult, as string) error {
-		fh := zip.FileHeader{
-			Name:               as,
-			UncompressedSize64: uint64(result.Size()),
-			Method:             zip.Deflate,
-		}
-		if m := result.ModuleType(); m != "" {
-			fh.Name += "." + m
-		}
-		wr, err := w.CreateHeader(&fh)
-		if err != nil {
+func (f *filerServer) writeRemoteFileAs(ctx context.Context, zw *zip.Writer, tw *tar.Writer, name, as string) error {
+	return f.store.Download(ctx, name, func(result DownloadResult) error {
+		if zw != nil {
+			fh := zip.FileHeader{
+				Name:               as,
+				UncompressedSize64: uint64(result.Size),
+				Method:             zip.Deflate,
+			}
+			if result.ModuleType != "" {
+				fh.Name += "." + result.ModuleType
+			}
+			wr, err := zw.CreateHeader(&fh)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(wr, result.Body)
 			return err
 		}
-		_, err = io.Copy(wr, result.Body())
-		return err
-	}
-}
-
-func writeToTar(w *tar.Writer) func(result common.DownloadResult, as string) error {
-	return func(result common.DownloadResult, as string) error {
-		fh := tar.Header{
-			Name:     as,
-			Mode:     0666,
-			Size:     result.Size(),
-			Typeflag: tar.TypeReg,
-		}
-		if tm := result.LastModifiedTimestamp(); tm != 0 {
-			fh.ModTime = time.Unix(tm, 0)
-		}
-		if mn := result.ModuleType(); mn != "" {
-			fh.Xattrs = map[string]string{"user.fs_module_type": mn}
-		}
-		if err := w.WriteHeader(&fh); err != nil {
+		if tw != nil {
+			fh := tar.Header{
+				Name:     as,
+				Mode:     0666,
+				Size:     result.Size,
+				Typeflag: tar.TypeReg,
+			}
+			if result.LastModifiedTimestamp != 0 {
+				fh.ModTime = time.Unix(result.LastModifiedTimestamp, 0)
+			}
+			if result.ModuleType != "" {
+				fh.Xattrs = map[string]string{"user.fs_module_type": result.ModuleType}
+			}
+			if err := tw.WriteHeader(&fh); err != nil {
+				return err
+			}
+			_, err := io.Copy(tw, result.Body)
 			return err
 		}
-		_, err := io.Copy(w, result.Body())
-		return err
-	}
-}
-
-func (f *filerServer) writeRemoteFileAs(ctx context.Context, wr func(result common.DownloadResult, as string) error, name, as string) error {
-	result, err := f.backend.Download(ctx, name, common.DownloadOptions{})
-	if err != nil {
-		return err
-	}
-	defer result.Body().Close()
-	return wr(result, as)
+		return nil
+	})
 }
 
 func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, problemID string) error {
 	prefix := "problem/" + problemID + "/"
-	names, _ := f.backend.List(ctx, prefix)
-	wr := writeToZip(w)
+	names, _ := f.store.List(ctx, prefix)
 	for _, name := range names {
 		pname := strings.TrimPrefix(name, prefix)
 		if pname == "checker" {
-			f.writeRemoteFileAs(ctx, wr, name, "checker")
+			f.writeRemoteFileAs(ctx, w, nil, name, "checker")
 			continue
 		}
 		splits := strings.Split(pname, "/")
@@ -387,9 +360,8 @@ func (f *filerServer) writeProblemData(ctx context.Context, w *zip.Writer, probl
 		if dname == "" {
 			continue
 		}
-		f.writeRemoteFileAs(ctx, wr, name, dname)
+		f.writeRemoteFileAs(ctx, w, nil, name, dname)
 	}
-
 	return nil
 }
 
@@ -405,22 +377,18 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 	contestID := r.FormValue("contest")
 	submitID := r.FormValue("submit")
 	testingID := r.FormValue("testing")
-	wz := writeToZip(cout)
 
 	if contestID != "" && submitID != "" && testingID != "" {
-		names, _ := f.backend.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
+		names, _ := f.store.List(r.Context(), "submit/"+contestID+"/"+submitID+"/"+testingID+"/")
 		for _, name := range names {
 			splits := strings.Split(name, "/")
-			if len(splits) < 5 {
+			if len(splits) < 5 || splits[len(splits)-1] != "output" {
 				continue
 			}
-			if splits[len(splits)-1] != "output" {
-				continue
-			}
-			f.writeRemoteFileAs(r.Context(), wz, name, splits[len(splits)-2]+".o")
+			f.writeRemoteFileAs(r.Context(), cout, nil, name, splits[len(splits)-2]+".o")
 		}
-		f.writeRemoteFileAs(r.Context(), wz, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
-		f.writeRemoteFileAs(r.Context(), wz, "submit/"+contestID+"/"+submitID+"/sourceModule", "solution")
+		f.writeRemoteFileAs(r.Context(), cout, nil, "submit/"+contestID+"/"+submitID+"/compiledModule", "solution")
+		f.writeRemoteFileAs(r.Context(), cout, nil, "submit/"+contestID+"/"+submitID+"/sourceModule", "solution")
 	}
 
 	if problemID := r.FormValue("problem"); problemID != "" {
@@ -429,24 +397,23 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
-	fr, err := f.backend.Download(ctx, name, common.DownloadOptions{})
-	if err != nil {
-		return nil, err
-	}
-	defer fr.Body().Close()
-	xr := pb.Asset{
-		Name:         as,
-		OriginalSize: fr.Size(),
-		Truncated:    fr.Size() > limit,
-	}
-	bb := make([]byte, int(limit))
-	n, err := fr.Body().Read(bb)
-	if err != nil {
-		return nil, err
-	}
-	bb = bb[:n]
-	xr.Data = append([]byte(nil), bb...)
-	return &xr, nil
+	var asset *pb.Asset
+	err := f.store.Download(ctx, name, func(result DownloadResult) error {
+		xr := pb.Asset{
+			Name:         as,
+			OriginalSize: result.Size,
+			Truncated:    result.Size > limit,
+		}
+		bb := make([]byte, limit)
+		n, err := result.Body.Read(bb)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		xr.Data = append([]byte(nil), bb[:n]...)
+		asset = &xr
+		return nil
+	})
+	return asset, err
 }
 
 func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request) {
@@ -478,20 +445,18 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	var err error
 	result.Solution, err = f.downloadAsset(ctx, "submit/"+contestID+"/"+submitID+"/sourceModule", "source", solutionSizeLimit)
 	if err != nil {
-		http.Error(w, "submit/"+contestID+"/"+submitID+"/sourceModule: "+err.Error(), http.StatusNotFound)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
 	prefix := problemID + "/"
-
-	names, err := f.backend.List(ctx, prefix)
+	names, err := f.store.List(ctx, prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
 	testSet := make(map[int64]struct{})
-
 	for _, name := range names {
 		pname := strings.TrimPrefix(name, prefix)
 		if pname == "checker" {
@@ -534,14 +499,9 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 
 	b, err := proto.Marshal(&result)
 	if err != nil {
-		if errors.Is(err, efcommon.ErrNotFound) {
-			http.NotFound(w, r)
-			return
-		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 }
 
@@ -563,6 +523,10 @@ func (f *filerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusMethodNotAllowed)
 	}
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
 		log.Errorf("%q: %v", path, err)
 	}
 }
@@ -574,7 +538,7 @@ func (f *filerServer) handleTarDownload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	names, err := f.backend.List(r.Context(), path)
+	names, err := f.store.List(r.Context(), path)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -583,10 +547,8 @@ func (f *filerServer) handleTarDownload(w http.ResponseWriter, r *http.Request) 
 
 	fw := tar.NewWriter(w)
 	defer fw.Close()
-	wfw := writeToTar(fw)
-
 	for _, v := range names {
-		f.writeRemoteFileAs(r.Context(), wfw, v, v)
+		f.writeRemoteFileAs(r.Context(), nil, fw, v, v)
 	}
 }
 
@@ -619,7 +581,7 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		if h.Name == "" || strings.HasSuffix(h.Name, "/") {
 			continue
 		}
-		fi := common.FileInfo{
+		fi := FileInfo{
 			ModuleType:    h.Xattrs["user.fs_module_type"],
 			Name:          h.Name,
 			ContentLength: h.Size,
@@ -627,7 +589,7 @@ func (f *filerServer) handleTarUpload(w http.ResponseWriter, r *http.Request) {
 		if !h.ModTime.IsZero() {
 			fi.TimestampUnix = h.ModTime.Unix()
 		}
-		res, err := f.backend.Upload(r.Context(), fi, fr)
+		res, err := f.store.Upload(r.Context(), fi, fr)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -652,7 +614,7 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	files, err := f.backend.List(r.Context(), "")
+	files, err := f.store.List(r.Context(), "")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -661,7 +623,7 @@ func (f *filerServer) handleWipe(w http.ResponseWriter, r *http.Request) {
 		if v == "" {
 			continue
 		}
-		if err = f.backend.Delete(r.Context(), v); err != nil {
+		if err = f.store.Delete(r.Context(), v); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}

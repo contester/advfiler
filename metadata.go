@@ -4,22 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"sort"
 	"strconv"
-
-	"github.com/contester/advfiler/common"
-	"stingr.net/go/efstore/efcommon"
 )
 
 type metadataServer struct {
-	kv common.DB
+	store *Store
 }
 
-func NewMetadataServer(kv common.DB) *metadataServer {
-	return &metadataServer{
-		kv: kv,
-	}
+func NewMetadataServer(store *Store) *metadataServer {
+	return &metadataServer{store: store}
 }
 
 type problemManifest struct {
@@ -58,16 +54,8 @@ func (f *metadataServer) handleSetManifest(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err = f.kv.Set(r.Context(), revKey(mf.Id, mf.Revision), mb); err != nil {
+	if err = f.store.SetManifest(r.Context(), revKey(mf.Id, mf.Revision), mb); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	return
-}
-
-func (f *metadataServer) handleDelManifest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "", http.StatusMethodNotAllowed)
-		return
 	}
 }
 
@@ -77,7 +65,11 @@ func revKey(id string, rev int) string {
 
 func (f *metadataServer) getManifest(ctx context.Context, key string) (problemManifest, error) {
 	var result problemManifest
-	err := common.KVGetJson(ctx, f.kv, key, &result)
+	data, err := f.store.GetManifest(ctx, key)
+	if err != nil {
+		return result, err
+	}
+	err = json.Unmarshal(data, &result)
 	return result, err
 }
 
@@ -110,7 +102,7 @@ func (f *metadataServer) buildKeys(ctx context.Context, pk problemKey) ([]string
 	if pk.Revision != 0 {
 		return []string{revKey(pk.Id, pk.Revision)}, nil
 	}
-	return f.kv.List(ctx, pk.Id)
+	return f.store.ListManifests(ctx, pk.Id)
 }
 
 func getRequestProblemKey(r *http.Request) (problemKey, error) {
@@ -144,7 +136,7 @@ func (f *metadataServer) handleGetManifest(w http.ResponseWriter, r *http.Reques
 
 	revs, err := f.getK(r.Context(), pk)
 	if err != nil {
-		if errors.Is(err, efcommon.ErrNotFound) {
+		if errors.Is(err, fs.ErrNotExist) {
 			http.NotFound(w, r)
 			return
 		}
