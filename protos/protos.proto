@@ -8,12 +8,26 @@ message Digests {
     bytes sha1 = 1;
     bytes md5 = 2;
     bytes sha256 = 3;
-};
+}
 
-message FileMetadata {
-    string module_type = 1;
-    Digests digests = 2;
-    int64 timestamp_unix = 3;
+message DirectoryEntry {
+    bytes blake3_hash = 1;
+    string module_type = 2;
+    int64 last_modified_timestamp = 3;
+    Digests digests = 4;
+    int64 data_size = 5;
+    bool external = 6;
+}
+
+message PathList {
+    repeated string paths = 1;
+}
+
+message HashEntry {
+    oneof state {
+        PathList inline_paths = 1;
+        int64 refcount = 2;
+    }
 }
 
 enum AuthAction {
@@ -27,10 +41,6 @@ message Asset {
     bool truncated = 2;
     bytes data = 3;
     int64 original_size = 4;
-}
-
-message Assets {
-    repeated Asset asset = 1;
 }
 
 message TestRecord {
