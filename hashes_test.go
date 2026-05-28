@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"testing"
 
 	"lukechampine.com/blake3"
@@ -57,12 +58,18 @@ func TestDigestsToMap(t *testing.T) {
 	}
 }
 
-func TestDigestsRoundTrip(t *testing.T) {
+func TestDigestsHeaderRoundTrip(t *testing.T) {
 	h := NewHashes()
 	h.Write([]byte("roundtrip"))
 	d := h.Digests()
-	m := DigestsToMap(d)
-	d2 := MapToDigests(m)
+
+	hdr := http.Header{}
+	AddDigests(hdr, d)
+	d2 := ParseDigests(hdr)
+
+	if !bytes.Equal(d.Blake3, d2.Blake3) {
+		t.Fatal("Blake3 roundtrip failed")
+	}
 	if !bytes.Equal(d.SHA256, d2.SHA256) {
 		t.Fatal("SHA256 roundtrip failed")
 	}
@@ -71,5 +78,25 @@ func TestDigestsRoundTrip(t *testing.T) {
 	}
 	if !bytes.Equal(d.MD5, d2.MD5) {
 		t.Fatal("MD5 roundtrip failed")
+	}
+}
+
+func TestVerifyDigests(t *testing.T) {
+	h := NewHashes()
+	h.Write([]byte("verify me"))
+	d := h.Digests()
+
+	// All matching received digests pass.
+	if err := VerifyDigests(d, d); err != nil {
+		t.Fatalf("matching digests should verify: %v", err)
+	}
+	// Empty received digests pass (nothing to check).
+	if err := VerifyDigests(d, Digests{}); err != nil {
+		t.Fatalf("empty received should verify: %v", err)
+	}
+	// A mismatched received digest fails.
+	bad := Digests{SHA256: []byte("not the right hash")}
+	if err := VerifyDigests(d, bad); err == nil {
+		t.Fatal("mismatched digest should fail verification")
 	}
 }

@@ -107,11 +107,10 @@ func manifestKey(key string) []byte {
 
 // FileInfo holds the metadata for a file upload.
 type FileInfo struct {
-	Name, ModuleType    string
-	ContentLength       int64
-	TimestampUnix       int64
-	RecvDigests         map[string]string
-	Blake3Hash          []byte
+	Name, ModuleType string
+	ContentLength    int64
+	TimestampUnix    int64
+	RecvDigests      Digests
 }
 
 // UploadStatus is returned after a successful upload.
@@ -216,11 +215,9 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 	}
 	digests := hashes.Digests()
 
-	// Verify Blake3Hash if provided (transit corruption check).
-	if len(info.Blake3Hash) > 0 {
-		if !bytes.Equal(digests.Blake3, info.Blake3Hash) {
-			return UploadStatus{}, fmt.Errorf("blake3 hash mismatch: transit corruption detected")
-		}
+	// Verify any client-provided digests (transit corruption check).
+	if err := VerifyDigests(digests, info.RecvDigests); err != nil {
+		return UploadStatus{}, err
 	}
 
 	blake3Hash := digests.Blake3

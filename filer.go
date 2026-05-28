@@ -5,7 +5,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,38 +48,6 @@ func tokenFromHeader(req *http.Request) string {
 }
 
 var errUnauthorized = errors.New("unauthorized")
-
-func addDigestsToHeader(h http.Header, digests map[string]string) {
-	if len(digests) == 0 {
-		return
-	}
-	dkeys := make([]string, 0, len(digests))
-	for k := range digests {
-		dkeys = append(dkeys, k)
-	}
-	sort.Strings(dkeys)
-	dvals := make([]string, 0, len(dkeys))
-	for _, k := range dkeys {
-		dvals = append(dvals, k+"="+digests[k])
-	}
-	h.Add("Digest", strings.Join(dvals, ","))
-	if md5, ok := digests["MD5"]; ok && md5 != "" {
-		h.Add("Content-MD5", md5)
-	}
-}
-
-func parseDigests(dh string) map[string]string {
-	splits := strings.Split(dh, ",")
-	result := make(map[string]string, len(splits))
-	for _, v := range splits {
-		ds := strings.SplitN(strings.TrimSpace(v), "=", 2)
-		if len(ds) != 2 {
-			continue
-		}
-		result[strings.ToUpper(ds[0])] = ds[1]
-	}
-	return result
-}
 
 func (f *filerServer) handleList(ctx context.Context, w http.ResponseWriter, r *http.Request, path string) error {
 	if v, _ := f.authChecker.Check(ctx, tokenFromHeader(r), pb.AuthAction_A_READ, path); !v {
@@ -129,16 +96,14 @@ func (f *filerServer) handleDownload(ctx context.Context, w http.ResponseWriter,
 			w.Header().Set("Last-Modified", t.UTC().Format(http.TimeFormat))
 		}
 
-		digestMap := DigestsToMap(result.Digests)
-
 		if r.Method == http.MethodHead {
-			addDigestsToHeader(w.Header(), digestMap)
+			AddDigests(w.Header(), result.Digests)
 			return nil
 		}
 		if limitValue != -1 && limitValue < rsize {
 			w.Header().Add("X-Fs-Truncated", "true")
 		} else {
-			addDigestsToHeader(w.Header(), digestMap)
+			AddDigests(w.Header(), result.Digests)
 		}
 		if limitValue == 0 {
 			return nil
@@ -254,13 +219,7 @@ func (f *filerServer) handleUpload(ctx context.Context, w http.ResponseWriter, r
 		}
 	}
 
-	fi.RecvDigests = parseDigests(r.Header.Get("Digest"))
-	if ch := r.Header.Get("Content-MD5"); ch != "" {
-		fi.RecvDigests["MD5"] = ch
-	}
-	if bh := r.Header.Get("X-Blake3-Hash"); bh != "" {
-		fi.Blake3Hash, _ = base64.StdEncoding.DecodeString(bh)
-	}
+	fi.RecvDigests = ParseDigests(r.Header)
 
 	result, err := f.store.Upload(ctx, fi, r.Body)
 	if err != nil {
