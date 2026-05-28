@@ -258,25 +258,23 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 
 		if err == badger.ErrKeyNotFound {
 			// First upload of this hash: store inline.
-			dirEntry := &pb.DirectoryEntry{
+			dirEntry := pb.DirectoryEntry_builder{
 				Blake3Hash:            blake3Hash,
-				ModuleType:            info.ModuleType,
-				LastModifiedTimestamp: info.TimestampUnix,
+				ModuleType:            proto.String(info.ModuleType),
+				LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
 				Digests:               digests.ToProto(),
-				DataSize:              dataSize,
-				External:              false,
-			}
+				DataSize:              proto.Int64(dataSize),
+				External:              proto.Bool(false),
+			}.Build()
 			if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 				return fmt.Errorf("writing dir meta: %w", setErr)
 			}
 			if setErr := tx.Set(dirDataKey(info.Name), data); setErr != nil {
 				return fmt.Errorf("writing inline data: %w", setErr)
 			}
-			newHE := &pb.HashEntry{
-				State: &pb.HashEntry_InlinePaths{
-					InlinePaths: &pb.PathList{Paths: []string{info.Name}},
-				},
-			}
+			newHE := pb.HashEntry_builder{
+				InlinePaths: pb.PathList_builder{Paths: []string{info.Name}}.Build(),
+			}.Build()
 			if setErr := setProto(tx, blobHashEntryKey(blake3Hash), newHE); setErr != nil {
 				return fmt.Errorf("writing hash entry: %w", setErr)
 			}
@@ -284,10 +282,11 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 		}
 
 		// HashEntry exists. Check state.
-		switch s := he.GetState().(type) {
-		case *pb.HashEntry_InlinePaths:
+		switch he.WhichState() {
+		case pb.HashEntry_InlinePaths_case:
 			// Add this path to the inline list.
-			paths := append(s.InlinePaths.GetPaths(), info.Name)
+			existingPaths := he.GetInlinePaths().GetPaths()
+			paths := append(existingPaths, info.Name)
 			numPaths := len(paths)
 
 			if shouldExternalize(numPaths, dataSize) {
@@ -300,12 +299,12 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 				}
 
 				// Rewrite all existing dir entries to external and delete their inline data.
-				for _, existingPath := range s.InlinePaths.GetPaths() {
+				for _, existingPath := range existingPaths {
 					existingDE, deErr := getProto[pb.DirectoryEntry](tx, dirMetaKey(existingPath))
 					if deErr != nil {
 						return fmt.Errorf("reading dir entry for %s: %w", existingPath, deErr)
 					}
-					existingDE.External = true
+					existingDE.SetExternal(true)
 					if setErr := setProto(tx, dirMetaKey(existingPath), existingDE); setErr != nil {
 						return fmt.Errorf("updating dir entry for %s: %w", existingPath, setErr)
 					}
@@ -315,72 +314,66 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 				}
 
 				// Write the new dir entry as external.
-				dirEntry := &pb.DirectoryEntry{
+				dirEntry := pb.DirectoryEntry_builder{
 					Blake3Hash:            blake3Hash,
-					ModuleType:            info.ModuleType,
-					LastModifiedTimestamp: info.TimestampUnix,
+					ModuleType:            proto.String(info.ModuleType),
+					LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
 					Digests:               digests.ToProto(),
-					DataSize:              dataSize,
-					External:              true,
-				}
+					DataSize:              proto.Int64(dataSize),
+					External:              proto.Bool(true),
+				}.Build()
 				if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 					return fmt.Errorf("writing new external dir entry: %w", setErr)
 				}
 
 				// Convert HashEntry to refcount.
-				newHE := &pb.HashEntry{
-					State: &pb.HashEntry_Refcount{
-						Refcount: int64(numPaths),
-					},
-				}
+				newHE := pb.HashEntry_builder{
+					Refcount: proto.Int64(int64(numPaths)),
+				}.Build()
 				if setErr := setProto(tx, blobHashEntryKey(blake3Hash), newHE); setErr != nil {
 					return fmt.Errorf("writing updated hash entry: %w", setErr)
 				}
 				hardlinked = true
 			} else {
 				// Keep inline, just add path.
-				dirEntry := &pb.DirectoryEntry{
+				dirEntry := pb.DirectoryEntry_builder{
 					Blake3Hash:            blake3Hash,
-					ModuleType:            info.ModuleType,
-					LastModifiedTimestamp: info.TimestampUnix,
+					ModuleType:            proto.String(info.ModuleType),
+					LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
 					Digests:               digests.ToProto(),
-					DataSize:              dataSize,
-					External:              false,
-				}
+					DataSize:              proto.Int64(dataSize),
+					External:              proto.Bool(false),
+				}.Build()
 				if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 					return fmt.Errorf("writing dir meta (inline dup): %w", setErr)
 				}
 				if setErr := tx.Set(dirDataKey(info.Name), data); setErr != nil {
 					return fmt.Errorf("writing inline data (dup): %w", setErr)
 				}
-				updatedHE := &pb.HashEntry{
-					State: &pb.HashEntry_InlinePaths{
-						InlinePaths: &pb.PathList{Paths: paths},
-					},
-				}
+				updatedHE := pb.HashEntry_builder{
+					InlinePaths: pb.PathList_builder{Paths: paths}.Build(),
+				}.Build()
 				if setErr := setProto(tx, blobHashEntryKey(blake3Hash), updatedHE); setErr != nil {
 					return fmt.Errorf("writing updated hash entry: %w", setErr)
 				}
 			}
 
-		case *pb.HashEntry_Refcount:
+		case pb.HashEntry_Refcount_case:
 			// Already externalized: increment refcount, write external dir entry.
-			dirEntry := &pb.DirectoryEntry{
+			dirEntry := pb.DirectoryEntry_builder{
 				Blake3Hash:            blake3Hash,
-				ModuleType:            info.ModuleType,
-				LastModifiedTimestamp: info.TimestampUnix,
+				ModuleType:            proto.String(info.ModuleType),
+				LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
 				Digests:               digests.ToProto(),
-				DataSize:              dataSize,
-				External:              true,
-			}
+				DataSize:              proto.Int64(dataSize),
+				External:              proto.Bool(true),
+			}.Build()
 			if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 				return fmt.Errorf("writing external dir entry: %w", setErr)
 			}
-			newHE := &pb.HashEntry{
-				State: &pb.HashEntry_Refcount{
-					Refcount: s.Refcount + 1,
-				},
-			}
+			newHE := pb.HashEntry_builder{
+				Refcount: proto.Int64(he.GetRefcount() + 1),
+			}.Build()
 			if setErr := setProto(tx, blobHashEntryKey(blake3Hash), newHE); setErr != nil {
 				return fmt.Errorf("writing updated hash entry (refcount): %w", setErr)
 			}
@@ -414,9 +407,9 @@ func unlinkHash(tx *badger.Txn, blake3Hash []byte, path string) error {
 		return fmt.Errorf("reading hash entry: %w", err)
 	}
 
-	switch s := he.GetState().(type) {
-	case *pb.HashEntry_InlinePaths:
-		oldPaths := s.InlinePaths.GetPaths()
+	switch he.WhichState() {
+	case pb.HashEntry_InlinePaths_case:
+		oldPaths := he.GetInlinePaths().GetPaths()
 		newPaths := make([]string, 0, len(oldPaths))
 		for _, p := range oldPaths {
 			if p != path {
@@ -429,18 +422,16 @@ func unlinkHash(tx *badger.Txn, blake3Hash []byte, path string) error {
 				return fmt.Errorf("deleting hash entry: %w", delErr)
 			}
 		} else {
-			updatedHE := &pb.HashEntry{
-				State: &pb.HashEntry_InlinePaths{
-					InlinePaths: &pb.PathList{Paths: newPaths},
-				},
-			}
+			updatedHE := pb.HashEntry_builder{
+				InlinePaths: pb.PathList_builder{Paths: newPaths}.Build(),
+			}.Build()
 			if setErr := setProto(tx, blobHashEntryKey(blake3Hash), updatedHE); setErr != nil {
 				return fmt.Errorf("writing updated hash entry: %w", setErr)
 			}
 		}
 
-	case *pb.HashEntry_Refcount:
-		newRC := s.Refcount - 1
+	case pb.HashEntry_Refcount_case:
+		newRC := he.GetRefcount() - 1
 		if newRC <= 0 {
 			// Delete blob data and digests.
 			if delErr := tx.Delete(blobDataKey(blake3Hash)); delErr != nil && delErr != badger.ErrKeyNotFound {
@@ -453,11 +444,9 @@ func unlinkHash(tx *badger.Txn, blake3Hash []byte, path string) error {
 				return fmt.Errorf("deleting hash entry: %w", delErr)
 			}
 		} else {
-			newHE := &pb.HashEntry{
-				State: &pb.HashEntry_Refcount{
-					Refcount: newRC,
-				},
-			}
+			newHE := pb.HashEntry_builder{
+				Refcount: proto.Int64(newRC),
+			}.Build()
 			if setErr := setProto(tx, blobHashEntryKey(blake3Hash), newHE); setErr != nil {
 				return fmt.Errorf("writing updated hash entry: %w", setErr)
 			}

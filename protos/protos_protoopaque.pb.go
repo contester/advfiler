@@ -4,6 +4,8 @@
 // 	protoc        v7.34.0
 // source: protos.proto
 
+//go:build protoopaque
+
 package protos
 
 import (
@@ -1134,7 +1136,7 @@ const file_protos_proto_rawDesc = "" +
 	"\x06A_NONE\x10\x00\x12\n" +
 	"\n" +
 	"\x06A_READ\x10\x01\x12\v\n" +
-	"\aA_WRITE\x10\x02B0Z$github.com/contester/advfiler/protos\x92\x03\a\xd2>\x02\x10\x03 \x03b\beditionsp\xe9\a"
+	"\aA_WRITE\x10\x02B0Z$github.com/contester/advfiler/protos\x92\x03\a\xd2>\x02\x10\x02 \x03b\beditionsp\xe9\a"
 
 var file_protos_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_protos_proto_msgTypes = make([]protoimpl.MessageInfo, 7)

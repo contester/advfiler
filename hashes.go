@@ -62,11 +62,11 @@ func DigestsFromProto(s *pb.Digests) Digests {
 }
 
 func (d Digests) ToProto() *pb.Digests {
-	return &pb.Digests{
+	return pb.Digests_builder{
 		Sha256: d.SHA256,
 		Sha1:   d.SHA1,
 		Md5:    d.MD5,
-	}
+	}.Build()
 }
 
 // DigestsToMap renders digests as a base64 string map for the JSON upload

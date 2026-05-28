@@ -358,18 +358,17 @@ func (f *filerServer) HandlePackage(w http.ResponseWriter, r *http.Request) {
 func (f *filerServer) downloadAsset(ctx context.Context, name, as string, limit int64) (*pb.Asset, error) {
 	var asset *pb.Asset
 	err := f.store.Download(ctx, name, func(result DownloadResult) error {
-		xr := pb.Asset{
-			Name:         as,
-			OriginalSize: result.Size,
-			Truncated:    result.Size > limit,
-		}
 		bb := make([]byte, limit)
 		n, err := result.Body.Read(bb)
 		if err != nil && err != io.EOF {
 			return err
 		}
-		xr.Data = append([]byte(nil), bb[:n]...)
-		asset = &xr
+		asset = pb.Asset_builder{
+			Name:         proto.String(as),
+			OriginalSize: proto.Int64(result.Size),
+			Truncated:    proto.Bool(result.Size > limit),
+			Data:         append([]byte(nil), bb[:n]...),
+		}.Build()
 		return nil
 	})
 	return asset, err
@@ -401,12 +400,12 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	}
 
 	var result pb.TestingRecord
-	var err error
-	result.Solution, err = f.downloadAsset(ctx, "submit/"+contestID+"/"+submitID+"/sourceModule", "source", solutionSizeLimit)
+	solution, err := f.downloadAsset(ctx, "submit/"+contestID+"/"+submitID+"/sourceModule", "source", solutionSizeLimit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	result.SetSolution(solution)
 
 	prefix := problemID + "/"
 	names, err := f.store.List(ctx, prefix)
@@ -437,24 +436,28 @@ func (f *filerServer) handleProtoPackage(w http.ResponseWriter, r *http.Request)
 	}
 	sort.Slice(testList, func(i, j int) bool { return testList[i] < testList[j] })
 
+	var tests []*pb.TestRecord
 	for _, testID := range testList {
 		outName := "submit/" + contestID + "/" + submitID + "/" + testingID + "/" + strconv.FormatInt(testID, 10) + "/output"
 		out, err := f.downloadAsset(ctx, outName, "output", sizeLimit)
 		if err != nil {
 			continue
 		}
-		testRecord := pb.TestRecord{
-			TestId: testID,
-			Output: out,
-		}
 		testPrefix := prefix + "tests/" + strconv.FormatInt(testID, 10) + "/"
-		if testRecord.Input, err = f.downloadAsset(ctx, testPrefix+"input.txt", "input", sizeLimit); err != nil {
+		input, err := f.downloadAsset(ctx, testPrefix+"input.txt", "input", sizeLimit)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		testRecord.Answer, _ = f.downloadAsset(ctx, testPrefix+"answer.txt", "answer", sizeLimit)
-		result.Test = append(result.Test, &testRecord)
+		answer, _ := f.downloadAsset(ctx, testPrefix+"answer.txt", "answer", sizeLimit)
+		tests = append(tests, pb.TestRecord_builder{
+			TestId: proto.Int64(testID),
+			Output: out,
+			Input:  input,
+			Answer: answer,
+		}.Build())
 	}
+	result.SetTest(tests)
 
 	b, err := proto.Marshal(&result)
 	if err != nil {

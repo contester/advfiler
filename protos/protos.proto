@@ -1,8 +1,14 @@
-syntax = "proto3";
+edition = "2024";
+
+option features.utf8_validation = NONE;
+option features.enforce_naming_style = STYLE_LEGACY;
+option features.default_symbol_visibility = EXPORT_ALL;
 
 option go_package = "github.com/contester/advfiler/protos";
+option features.(pb.go).api_level = API_OPAQUE;
 
 package protos;
+import "google/protobuf/go_features.proto";
 
 message Digests {
     bytes sha1 = 1;
