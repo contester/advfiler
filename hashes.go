@@ -50,6 +50,10 @@ func (s *Hashes) Digests() Digests {
 	}
 }
 
+// emptyDigests holds the digests of zero-length input, synthesized once.
+// Zero-size files don't store their digests; they're served from here.
+var emptyDigests = NewHashes().Digests()
+
 func DigestsFromProto(s *pb.Digests) Digests {
 	if s == nil {
 		return Digests{}

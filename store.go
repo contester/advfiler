@@ -238,7 +238,7 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 		}
 		if err == nil && existing != nil {
 			// Path exists: unlink the old hash, delete old inline data if applicable.
-			if !existing.GetExternal() {
+			if existing.HasDigestsAndSize() {
 				if delErr := tx.Delete(dirDataKey(info.Name)); delErr != nil && delErr != badger.ErrKeyNotFound {
 					return fmt.Errorf("deleting old inline data: %w", delErr)
 				}
@@ -248,6 +248,17 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 					return fmt.Errorf("unlinking old hash: %w", ulErr)
 				}
 			}
+		}
+
+		// Zero-size files: store a minimal entry with no blake3 hash, no
+		// DigestsAndSize, no inline data, and no HashEntry. Digests are
+		// synthesized on read.
+		if dataSize == 0 {
+			dirEntry := pb.DirectoryEntry_builder{
+				ModuleType:            proto.String(info.ModuleType),
+				LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
+			}.Build()
+			return setProto(tx, dirMetaKey(info.Name), dirEntry)
 		}
 
 		// Look up HashEntry for this blob.
@@ -262,9 +273,10 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 				Blake3Hash:            blake3Hash,
 				ModuleType:            proto.String(info.ModuleType),
 				LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
-				Digests:               digests.ToProto(),
-				DataSize:              proto.Int64(dataSize),
-				External:              proto.Bool(false),
+				DigestsAndSize: pb.DigestsAndSize_builder{
+					Digests: digests.ToProto(),
+					Size:    proto.Int64(dataSize),
+				}.Build(),
 			}.Build()
 			if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 				return fmt.Errorf("writing dir meta: %w", setErr)
@@ -294,17 +306,22 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 				if setErr := tx.Set(blobDataKey(blake3Hash), data); setErr != nil {
 					return fmt.Errorf("writing blob data: %w", setErr)
 				}
-				if setErr := setProto(tx, blobDigestsKey(blake3Hash), digests.ToProto()); setErr != nil {
+				if setErr := setProto(tx, blobDigestsKey(blake3Hash), pb.DigestsAndSize_builder{
+					Digests: digests.ToProto(),
+					Size:    proto.Int64(dataSize),
+				}.Build()); setErr != nil {
 					return fmt.Errorf("writing blob digests: %w", setErr)
 				}
 
-				// Rewrite all existing dir entries to external and delete their inline data.
+				// Rewrite all existing dir entries to external (drop their
+				// DigestsAndSize, which now lives under blobDigestsKey) and
+				// delete their inline data.
 				for _, existingPath := range existingPaths {
 					existingDE, deErr := getProto[pb.DirectoryEntry](tx, dirMetaKey(existingPath))
 					if deErr != nil {
 						return fmt.Errorf("reading dir entry for %s: %w", existingPath, deErr)
 					}
-					existingDE.SetExternal(true)
+					existingDE.ClearDigestsAndSize()
 					if setErr := setProto(tx, dirMetaKey(existingPath), existingDE); setErr != nil {
 						return fmt.Errorf("updating dir entry for %s: %w", existingPath, setErr)
 					}
@@ -313,14 +330,11 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 					}
 				}
 
-				// Write the new dir entry as external.
+				// Write the new dir entry as external (no DigestsAndSize).
 				dirEntry := pb.DirectoryEntry_builder{
 					Blake3Hash:            blake3Hash,
 					ModuleType:            proto.String(info.ModuleType),
 					LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
-					Digests:               digests.ToProto(),
-					DataSize:              proto.Int64(dataSize),
-					External:              proto.Bool(true),
 				}.Build()
 				if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 					return fmt.Errorf("writing new external dir entry: %w", setErr)
@@ -340,9 +354,10 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 					Blake3Hash:            blake3Hash,
 					ModuleType:            proto.String(info.ModuleType),
 					LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
-					Digests:               digests.ToProto(),
-					DataSize:              proto.Int64(dataSize),
-					External:              proto.Bool(false),
+					DigestsAndSize: pb.DigestsAndSize_builder{
+						Digests: digests.ToProto(),
+						Size:    proto.Int64(dataSize),
+					}.Build(),
 				}.Build()
 				if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 					return fmt.Errorf("writing dir meta (inline dup): %w", setErr)
@@ -359,14 +374,12 @@ func (s *Store) Upload(ctx context.Context, info FileInfo, body io.Reader) (Uplo
 			}
 
 		case pb.HashEntry_Refcount_case:
-			// Already externalized: increment refcount, write external dir entry.
+			// Already externalized: increment refcount, write external dir entry
+			// (no DigestsAndSize; it lives under blobDigestsKey).
 			dirEntry := pb.DirectoryEntry_builder{
 				Blake3Hash:            blake3Hash,
 				ModuleType:            proto.String(info.ModuleType),
 				LastModifiedTimestamp: proto.Int64(info.TimestampUnix),
-				Digests:               digests.ToProto(),
-				DataSize:              proto.Int64(dataSize),
-				External:              proto.Bool(true),
 			}.Build()
 			if setErr := setProto(tx, dirMetaKey(info.Name), dirEntry); setErr != nil {
 				return fmt.Errorf("writing external dir entry: %w", setErr)
@@ -469,25 +482,25 @@ func (s *Store) Download(ctx context.Context, path string, fn func(DownloadResul
 		}
 
 		dr := DownloadResult{
-			Size:                  de.GetDataSize(),
 			ModuleType:            de.GetModuleType(),
 			LastModifiedTimestamp: de.GetLastModifiedTimestamp(),
 		}
 
-		if de.GetExternal() {
-			// Load digests from blob.
-			digProto, err := getProto[pb.Digests](tx, blobDigestsKey(de.GetBlake3Hash()))
-			if err != nil && err != badger.ErrKeyNotFound {
-				return fmt.Errorf("reading blob digests: %w", err)
-			}
-			if err == nil {
-				dr.Digests = DigestsFromProto(digProto)
-			}
+		// Zero-size file: no blake3 hash, no data, digests synthesized.
+		if !de.HasBlake3Hash() {
+			dr.Digests = emptyDigests
+			dr.Body = bytes.NewReader(nil)
+			return fn(dr)
+		}
 
-			// Load blob data.
-			dataItem, err := tx.Get(blobDataKey(de.GetBlake3Hash()))
+		if de.HasDigestsAndSize() {
+			// Internal (inline) data: digests and size are in the entry.
+			das := de.GetDigestsAndSize()
+			dr.Size = das.GetSize()
+			dr.Digests = DigestsFromProto(das.GetDigests())
+			dataItem, err := tx.Get(dirDataKey(path))
 			if err != nil {
-				return fmt.Errorf("reading blob data: %w", err)
+				return fmt.Errorf("reading inline data: %w", err)
 			}
 			return dataItem.Value(func(v []byte) error {
 				buf := make([]byte, len(v))
@@ -497,13 +510,25 @@ func (s *Store) Download(ctx context.Context, path string, fn func(DownloadResul
 			})
 		}
 
-		// Inline data.
-		dr.Digests = DigestsFromProto(de.GetDigests())
-		dataItem, err := tx.Get(dirDataKey(path))
+		// External: digests and size live under blobDigestsKey; fall back to
+		// the blob length if that record is missing.
+		das, err := getProto[pb.DigestsAndSize](tx, blobDigestsKey(de.GetBlake3Hash()))
+		if err != nil && err != badger.ErrKeyNotFound {
+			return fmt.Errorf("reading blob digests: %w", err)
+		}
+		if err == nil {
+			dr.Size = das.GetSize()
+			dr.Digests = DigestsFromProto(das.GetDigests())
+		}
+
+		dataItem, err := tx.Get(blobDataKey(de.GetBlake3Hash()))
 		if err != nil {
-			return fmt.Errorf("reading inline data: %w", err)
+			return fmt.Errorf("reading blob data: %w", err)
 		}
 		return dataItem.Value(func(v []byte) error {
+			if dr.Size == 0 {
+				dr.Size = int64(len(v))
+			}
 			buf := make([]byte, len(v))
 			copy(buf, v)
 			dr.Body = bytes.NewReader(buf)
@@ -523,7 +548,7 @@ func (s *Store) Delete(ctx context.Context, path string) error {
 			return fmt.Errorf("reading dir entry: %w", err)
 		}
 
-		if !de.GetExternal() {
+		if de.HasDigestsAndSize() {
 			if delErr := tx.Delete(dirDataKey(path)); delErr != nil && delErr != badger.ErrKeyNotFound {
 				return fmt.Errorf("deleting inline data: %w", delErr)
 			}

@@ -236,6 +236,81 @@ func TestUploadOverwrite(t *testing.T) {
 	}
 }
 
+func TestUploadZeroSize(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	status, err := s.Upload(ctx, FileInfo{Name: "empty/file", ModuleType: "txt"}, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("upload failed: %v", err)
+	}
+	if status.Size != 0 {
+		t.Fatalf("expected size 0, got %d", status.Size)
+	}
+
+	err = s.Download(ctx, "empty/file", func(dr DownloadResult) error {
+		if dr.Size != 0 {
+			t.Errorf("expected size 0, got %d", dr.Size)
+		}
+		if dr.ModuleType != "txt" {
+			t.Errorf("expected module type txt, got %q", dr.ModuleType)
+		}
+		got, err := io.ReadAll(dr.Body)
+		if err != nil {
+			return err
+		}
+		if len(got) != 0 {
+			t.Errorf("expected empty body, got %q", got)
+		}
+		// Digests are synthesized from empty input.
+		if !bytes.Equal(dr.Digests.SHA256, emptyDigests.SHA256) {
+			t.Errorf("sha256 not the empty-input digest")
+		}
+		if !bytes.Equal(dr.Digests.Blake3, emptyDigests.Blake3) {
+			t.Errorf("blake3 not the empty-input digest")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("download failed: %v", err)
+	}
+}
+
+func TestUploadZeroSizeOverwriteTransitions(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	fi := FileInfo{Name: "transition/file"}
+
+	// non-zero -> zero -> non-zero, verifying content each step.
+	steps := []string{"hello", "", "world"}
+	for _, content := range steps {
+		if _, err := s.Upload(ctx, fi, strings.NewReader(content)); err != nil {
+			t.Fatalf("upload %q failed: %v", content, err)
+		}
+		err := s.Download(ctx, fi.Name, func(dr DownloadResult) error {
+			got, err := io.ReadAll(dr.Body)
+			if err != nil {
+				return err
+			}
+			if string(got) != content {
+				t.Errorf("expected %q, got %q", content, got)
+			}
+			if dr.Size != int64(len(content)) {
+				t.Errorf("expected size %d, got %d", len(content), dr.Size)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("download after %q failed: %v", content, err)
+		}
+	}
+
+	// After the transitions, deleting the final entry should succeed.
+	if err := s.Delete(ctx, fi.Name); err != nil {
+		t.Fatalf("delete failed: %v", err)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

@@ -16,13 +16,19 @@ message Digests {
     bytes sha256 = 3;
 }
 
+message DigestsAndSize {
+    Digests digests = 1;
+    int64 size = 2;
+}
+
 message DirectoryEntry {
     bytes blake3_hash = 1;
     string module_type = 2;
     int64 last_modified_timestamp = 3;
-    Digests digests = 4;
-    int64 data_size = 5;
-    bool external = 6;
+    // Present only for internal (inline) entries. Absent for external entries
+    // (the data lives in a blob and DigestsAndSize is under blobDigestsKey) and
+    // for zero-size entries (no blob, digests synthesized on read).
+    DigestsAndSize digests_and_size = 4;
 }
 
 message PathList {

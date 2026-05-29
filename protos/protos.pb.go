@@ -209,14 +209,112 @@ func (b0 Digests_builder) Build() *Digests {
 	return m0
 }
 
+type DigestsAndSize struct {
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Digests     *Digests               `protobuf:"bytes,1,opt,name=digests"`
+	xxx_hidden_Size        int64                  `protobuf:"varint,2,opt,name=size"`
+	XXX_raceDetectHookData protoimpl.RaceDetectHookData
+	XXX_presence           [1]uint32
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *DigestsAndSize) Reset() {
+	*x = DigestsAndSize{}
+	mi := &file_protos_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DigestsAndSize) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DigestsAndSize) ProtoMessage() {}
+
+func (x *DigestsAndSize) ProtoReflect() protoreflect.Message {
+	mi := &file_protos_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *DigestsAndSize) GetDigests() *Digests {
+	if x != nil {
+		return x.xxx_hidden_Digests
+	}
+	return nil
+}
+
+func (x *DigestsAndSize) GetSize() int64 {
+	if x != nil {
+		return x.xxx_hidden_Size
+	}
+	return 0
+}
+
+func (x *DigestsAndSize) SetDigests(v *Digests) {
+	x.xxx_hidden_Digests = v
+}
+
+func (x *DigestsAndSize) SetSize(v int64) {
+	x.xxx_hidden_Size = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+}
+
+func (x *DigestsAndSize) HasDigests() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Digests != nil
+}
+
+func (x *DigestsAndSize) HasSize() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *DigestsAndSize) ClearDigests() {
+	x.xxx_hidden_Digests = nil
+}
+
+func (x *DigestsAndSize) ClearSize() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_Size = 0
+}
+
+type DigestsAndSize_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Digests *Digests
+	Size    *int64
+}
+
+func (b0 DigestsAndSize_builder) Build() *DigestsAndSize {
+	m0 := &DigestsAndSize{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Digests = b.Digests
+	if b.Size != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		x.xxx_hidden_Size = *b.Size
+	}
+	return m0
+}
+
 type DirectoryEntry struct {
 	state                            protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Blake3Hash            []byte                 `protobuf:"bytes,1,opt,name=blake3_hash,json=blake3Hash"`
 	xxx_hidden_ModuleType            *string                `protobuf:"bytes,2,opt,name=module_type,json=moduleType"`
 	xxx_hidden_LastModifiedTimestamp int64                  `protobuf:"varint,3,opt,name=last_modified_timestamp,json=lastModifiedTimestamp"`
-	xxx_hidden_Digests               *Digests               `protobuf:"bytes,4,opt,name=digests"`
-	xxx_hidden_DataSize              int64                  `protobuf:"varint,5,opt,name=data_size,json=dataSize"`
-	xxx_hidden_External              bool                   `protobuf:"varint,6,opt,name=external"`
+	xxx_hidden_DigestsAndSize        *DigestsAndSize        `protobuf:"bytes,4,opt,name=digests_and_size,json=digestsAndSize"`
 	XXX_raceDetectHookData           protoimpl.RaceDetectHookData
 	XXX_presence                     [1]uint32
 	unknownFields                    protoimpl.UnknownFields
@@ -225,7 +323,7 @@ type DirectoryEntry struct {
 
 func (x *DirectoryEntry) Reset() {
 	*x = DirectoryEntry{}
-	mi := &file_protos_proto_msgTypes[1]
+	mi := &file_protos_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -237,7 +335,7 @@ func (x *DirectoryEntry) String() string {
 func (*DirectoryEntry) ProtoMessage() {}
 
 func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[1]
+	mi := &file_protos_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -272,25 +370,11 @@ func (x *DirectoryEntry) GetLastModifiedTimestamp() int64 {
 	return 0
 }
 
-func (x *DirectoryEntry) GetDigests() *Digests {
+func (x *DirectoryEntry) GetDigestsAndSize() *DigestsAndSize {
 	if x != nil {
-		return x.xxx_hidden_Digests
+		return x.xxx_hidden_DigestsAndSize
 	}
 	return nil
-}
-
-func (x *DirectoryEntry) GetDataSize() int64 {
-	if x != nil {
-		return x.xxx_hidden_DataSize
-	}
-	return 0
-}
-
-func (x *DirectoryEntry) GetExternal() bool {
-	if x != nil {
-		return x.xxx_hidden_External
-	}
-	return false
 }
 
 func (x *DirectoryEntry) SetBlake3Hash(v []byte) {
@@ -298,31 +382,21 @@ func (x *DirectoryEntry) SetBlake3Hash(v []byte) {
 		v = []byte{}
 	}
 	x.xxx_hidden_Blake3Hash = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 4)
 }
 
 func (x *DirectoryEntry) SetModuleType(v string) {
 	x.xxx_hidden_ModuleType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 4)
 }
 
 func (x *DirectoryEntry) SetLastModifiedTimestamp(v int64) {
 	x.xxx_hidden_LastModifiedTimestamp = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 6)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
 }
 
-func (x *DirectoryEntry) SetDigests(v *Digests) {
-	x.xxx_hidden_Digests = v
-}
-
-func (x *DirectoryEntry) SetDataSize(v int64) {
-	x.xxx_hidden_DataSize = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 6)
-}
-
-func (x *DirectoryEntry) SetExternal(v bool) {
-	x.xxx_hidden_External = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 6)
+func (x *DirectoryEntry) SetDigestsAndSize(v *DigestsAndSize) {
+	x.xxx_hidden_DigestsAndSize = v
 }
 
 func (x *DirectoryEntry) HasBlake3Hash() bool {
@@ -346,25 +420,11 @@ func (x *DirectoryEntry) HasLastModifiedTimestamp() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
-func (x *DirectoryEntry) HasDigests() bool {
+func (x *DirectoryEntry) HasDigestsAndSize() bool {
 	if x == nil {
 		return false
 	}
-	return x.xxx_hidden_Digests != nil
-}
-
-func (x *DirectoryEntry) HasDataSize() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
-}
-
-func (x *DirectoryEntry) HasExternal() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+	return x.xxx_hidden_DigestsAndSize != nil
 }
 
 func (x *DirectoryEntry) ClearBlake3Hash() {
@@ -382,18 +442,8 @@ func (x *DirectoryEntry) ClearLastModifiedTimestamp() {
 	x.xxx_hidden_LastModifiedTimestamp = 0
 }
 
-func (x *DirectoryEntry) ClearDigests() {
-	x.xxx_hidden_Digests = nil
-}
-
-func (x *DirectoryEntry) ClearDataSize() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
-	x.xxx_hidden_DataSize = 0
-}
-
-func (x *DirectoryEntry) ClearExternal() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
-	x.xxx_hidden_External = false
+func (x *DirectoryEntry) ClearDigestsAndSize() {
+	x.xxx_hidden_DigestsAndSize = nil
 }
 
 type DirectoryEntry_builder struct {
@@ -402,9 +452,10 @@ type DirectoryEntry_builder struct {
 	Blake3Hash            []byte
 	ModuleType            *string
 	LastModifiedTimestamp *int64
-	Digests               *Digests
-	DataSize              *int64
-	External              *bool
+	// Present only for internal (inline) entries. Absent for external entries
+	// (the data lives in a blob and DigestsAndSize is under blobDigestsKey) and
+	// for zero-size entries (no blob, digests synthesized on read).
+	DigestsAndSize *DigestsAndSize
 }
 
 func (b0 DirectoryEntry_builder) Build() *DirectoryEntry {
@@ -412,26 +463,18 @@ func (b0 DirectoryEntry_builder) Build() *DirectoryEntry {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Blake3Hash != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 4)
 		x.xxx_hidden_Blake3Hash = b.Blake3Hash
 	}
 	if b.ModuleType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 4)
 		x.xxx_hidden_ModuleType = b.ModuleType
 	}
 	if b.LastModifiedTimestamp != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 6)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
 		x.xxx_hidden_LastModifiedTimestamp = *b.LastModifiedTimestamp
 	}
-	x.xxx_hidden_Digests = b.Digests
-	if b.DataSize != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 6)
-		x.xxx_hidden_DataSize = *b.DataSize
-	}
-	if b.External != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 6)
-		x.xxx_hidden_External = *b.External
-	}
+	x.xxx_hidden_DigestsAndSize = b.DigestsAndSize
 	return m0
 }
 
@@ -444,7 +487,7 @@ type PathList struct {
 
 func (x *PathList) Reset() {
 	*x = PathList{}
-	mi := &file_protos_proto_msgTypes[2]
+	mi := &file_protos_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +499,7 @@ func (x *PathList) String() string {
 func (*PathList) ProtoMessage() {}
 
 func (x *PathList) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[2]
+	mi := &file_protos_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -501,7 +544,7 @@ type HashEntry struct {
 
 func (x *HashEntry) Reset() {
 	*x = HashEntry{}
-	mi := &file_protos_proto_msgTypes[3]
+	mi := &file_protos_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -513,7 +556,7 @@ func (x *HashEntry) String() string {
 func (*HashEntry) ProtoMessage() {}
 
 func (x *HashEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[3]
+	mi := &file_protos_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -636,7 +679,7 @@ func (b0 HashEntry_builder) Build() *HashEntry {
 type case_HashEntry_State protoreflect.FieldNumber
 
 func (x case_HashEntry_State) String() string {
-	md := file_protos_proto_msgTypes[3].Descriptor()
+	md := file_protos_proto_msgTypes[4].Descriptor()
 	if x == 0 {
 		return "not set"
 	}
@@ -673,7 +716,7 @@ type Asset struct {
 
 func (x *Asset) Reset() {
 	*x = Asset{}
-	mi := &file_protos_proto_msgTypes[4]
+	mi := &file_protos_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +728,7 @@ func (x *Asset) String() string {
 func (*Asset) ProtoMessage() {}
 
 func (x *Asset) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[4]
+	mi := &file_protos_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -845,7 +888,7 @@ type TestRecord struct {
 
 func (x *TestRecord) Reset() {
 	*x = TestRecord{}
-	mi := &file_protos_proto_msgTypes[5]
+	mi := &file_protos_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -857,7 +900,7 @@ func (x *TestRecord) String() string {
 func (*TestRecord) ProtoMessage() {}
 
 func (x *TestRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[5]
+	mi := &file_protos_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1058,7 @@ type TestingRecord struct {
 
 func (x *TestingRecord) Reset() {
 	*x = TestingRecord{}
-	mi := &file_protos_proto_msgTypes[6]
+	mi := &file_protos_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1027,7 +1070,7 @@ func (x *TestingRecord) String() string {
 func (*TestingRecord) ProtoMessage() {}
 
 func (x *TestingRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[6]
+	mi := &file_protos_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1097,16 +1140,17 @@ const file_protos_proto_rawDesc = "" +
 	"\aDigests\x12\x12\n" +
 	"\x04sha1\x18\x01 \x01(\fR\x04sha1\x12\x10\n" +
 	"\x03md5\x18\x02 \x01(\fR\x03md5\x12\x16\n" +
-	"\x06sha256\x18\x03 \x01(\fR\x06sha256\"\xee\x01\n" +
+	"\x06sha256\x18\x03 \x01(\fR\x06sha256\"O\n" +
+	"\x0eDigestsAndSize\x12)\n" +
+	"\adigests\x18\x01 \x01(\v2\x0f.protos.DigestsR\adigests\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\"\xcc\x01\n" +
 	"\x0eDirectoryEntry\x12\x1f\n" +
 	"\vblake3_hash\x18\x01 \x01(\fR\n" +
 	"blake3Hash\x12\x1f\n" +
 	"\vmodule_type\x18\x02 \x01(\tR\n" +
 	"moduleType\x126\n" +
-	"\x17last_modified_timestamp\x18\x03 \x01(\x03R\x15lastModifiedTimestamp\x12)\n" +
-	"\adigests\x18\x04 \x01(\v2\x0f.protos.DigestsR\adigests\x12\x1b\n" +
-	"\tdata_size\x18\x05 \x01(\x03R\bdataSize\x12\x1a\n" +
-	"\bexternal\x18\x06 \x01(\bR\bexternal\" \n" +
+	"\x17last_modified_timestamp\x18\x03 \x01(\x03R\x15lastModifiedTimestamp\x12@\n" +
+	"\x10digests_and_size\x18\x04 \x01(\v2\x16.protos.DigestsAndSizeR\x0edigestsAndSize\" \n" +
 	"\bPathList\x12\x14\n" +
 	"\x05paths\x18\x01 \x03(\tR\x05paths\"i\n" +
 	"\tHashEntry\x125\n" +
@@ -1137,31 +1181,33 @@ const file_protos_proto_rawDesc = "" +
 	"\aA_WRITE\x10\x02B0Z$github.com/contester/advfiler/protos\x92\x03\a\xd2>\x02\x10\x03 \x03b\beditionsp\xe9\a"
 
 var file_protos_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_protos_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_protos_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_protos_proto_goTypes = []any{
 	(AuthAction)(0),        // 0: protos.AuthAction
 	(*Digests)(nil),        // 1: protos.Digests
-	(*DirectoryEntry)(nil), // 2: protos.DirectoryEntry
-	(*PathList)(nil),       // 3: protos.PathList
-	(*HashEntry)(nil),      // 4: protos.HashEntry
-	(*Asset)(nil),          // 5: protos.Asset
-	(*TestRecord)(nil),     // 6: protos.TestRecord
-	(*TestingRecord)(nil),  // 7: protos.TestingRecord
+	(*DigestsAndSize)(nil), // 2: protos.DigestsAndSize
+	(*DirectoryEntry)(nil), // 3: protos.DirectoryEntry
+	(*PathList)(nil),       // 4: protos.PathList
+	(*HashEntry)(nil),      // 5: protos.HashEntry
+	(*Asset)(nil),          // 6: protos.Asset
+	(*TestRecord)(nil),     // 7: protos.TestRecord
+	(*TestingRecord)(nil),  // 8: protos.TestingRecord
 }
 var file_protos_proto_depIdxs = []int32{
-	1, // 0: protos.DirectoryEntry.digests:type_name -> protos.Digests
-	3, // 1: protos.HashEntry.inline_paths:type_name -> protos.PathList
-	5, // 2: protos.TestRecord.input:type_name -> protos.Asset
-	5, // 3: protos.TestRecord.output:type_name -> protos.Asset
-	5, // 4: protos.TestRecord.answer:type_name -> protos.Asset
-	5, // 5: protos.TestRecord.tester_output:type_name -> protos.Asset
-	5, // 6: protos.TestingRecord.solution:type_name -> protos.Asset
-	6, // 7: protos.TestingRecord.test:type_name -> protos.TestRecord
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	1, // 0: protos.DigestsAndSize.digests:type_name -> protos.Digests
+	2, // 1: protos.DirectoryEntry.digests_and_size:type_name -> protos.DigestsAndSize
+	4, // 2: protos.HashEntry.inline_paths:type_name -> protos.PathList
+	6, // 3: protos.TestRecord.input:type_name -> protos.Asset
+	6, // 4: protos.TestRecord.output:type_name -> protos.Asset
+	6, // 5: protos.TestRecord.answer:type_name -> protos.Asset
+	6, // 6: protos.TestRecord.tester_output:type_name -> protos.Asset
+	6, // 7: protos.TestingRecord.solution:type_name -> protos.Asset
+	7, // 8: protos.TestingRecord.test:type_name -> protos.TestRecord
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_protos_proto_init() }
@@ -1169,7 +1215,7 @@ func file_protos_proto_init() {
 	if File_protos_proto != nil {
 		return
 	}
-	file_protos_proto_msgTypes[3].OneofWrappers = []any{
+	file_protos_proto_msgTypes[4].OneofWrappers = []any{
 		(*hashEntry_InlinePaths)(nil),
 		(*hashEntry_Refcount)(nil),
 	}
@@ -1179,7 +1225,7 @@ func file_protos_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_protos_proto_rawDesc), len(file_protos_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
