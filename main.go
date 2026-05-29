@@ -70,6 +70,7 @@ func main() {
 
 	f := NewFiler(store, &authCheck)
 	ms := NewMetadataServer(store)
+	xs := NewXMLServer(store, &authCheck)
 	http.Handle("/fs/", f)
 	http.HandleFunc("/fs2/", f.HandlePackage)
 	http.HandleFunc("/problem/set/", ms.handleSetManifest)
@@ -78,6 +79,8 @@ func main() {
 	http.HandleFunc("/wipe/", f.handleWipe)
 	http.HandleFunc("/protopackage/", f.handleProtoPackage)
 	http.HandleFunc("/protopackage", f.handleProtoPackage)
+	http.HandleFunc("/xml/contest/", xs.handleContest)
+	http.HandleFunc("/xml/problem/", xs.handleProblem)
 	systemdutil.ServeAll(nil, httpSockets, nil)
 	daemon.SdNotify(false, daemon.SdNotifyReady)
 	defer daemon.SdNotify(false, daemon.SdNotifyStopping)
