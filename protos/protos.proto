@@ -21,6 +21,17 @@ message DigestsAndSize {
     int64 size = 2;
 }
 
+message ContestRecord {
+    bytes content = 1;
+    int64 timestamp_unix = 2;
+}
+
+message ProblemRecord {
+    bytes content = 1;
+    int64 timestamp_unix = 2;
+    int64 revision = 3;
+}
+
 message DirectoryEntry {
     bytes blake3_hash = 1;
     string module_type = 2;
