@@ -309,6 +309,252 @@ func (b0 DigestsAndSize_builder) Build() *DigestsAndSize {
 	return m0
 }
 
+type ContestRecord struct {
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Content       []byte                 `protobuf:"bytes,1,opt,name=content"`
+	xxx_hidden_TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix"`
+	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
+	XXX_presence             [1]uint32
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *ContestRecord) Reset() {
+	*x = ContestRecord{}
+	mi := &file_protos_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContestRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContestRecord) ProtoMessage() {}
+
+func (x *ContestRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_protos_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *ContestRecord) GetContent() []byte {
+	if x != nil {
+		return x.xxx_hidden_Content
+	}
+	return nil
+}
+
+func (x *ContestRecord) GetTimestampUnix() int64 {
+	if x != nil {
+		return x.xxx_hidden_TimestampUnix
+	}
+	return 0
+}
+
+func (x *ContestRecord) SetContent(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Content = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
+}
+
+func (x *ContestRecord) SetTimestampUnix(v int64) {
+	x.xxx_hidden_TimestampUnix = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+}
+
+func (x *ContestRecord) HasContent() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *ContestRecord) HasTimestampUnix() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *ContestRecord) ClearContent() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_Content = nil
+}
+
+func (x *ContestRecord) ClearTimestampUnix() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_TimestampUnix = 0
+}
+
+type ContestRecord_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Content       []byte
+	TimestampUnix *int64
+}
+
+func (b0 ContestRecord_builder) Build() *ContestRecord {
+	m0 := &ContestRecord{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Content != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
+		x.xxx_hidden_Content = b.Content
+	}
+	if b.TimestampUnix != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		x.xxx_hidden_TimestampUnix = *b.TimestampUnix
+	}
+	return m0
+}
+
+type ProblemRecord struct {
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Content       []byte                 `protobuf:"bytes,1,opt,name=content"`
+	xxx_hidden_TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix"`
+	xxx_hidden_Revision      int64                  `protobuf:"varint,3,opt,name=revision"`
+	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
+	XXX_presence             [1]uint32
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *ProblemRecord) Reset() {
+	*x = ProblemRecord{}
+	mi := &file_protos_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProblemRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProblemRecord) ProtoMessage() {}
+
+func (x *ProblemRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_protos_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *ProblemRecord) GetContent() []byte {
+	if x != nil {
+		return x.xxx_hidden_Content
+	}
+	return nil
+}
+
+func (x *ProblemRecord) GetTimestampUnix() int64 {
+	if x != nil {
+		return x.xxx_hidden_TimestampUnix
+	}
+	return 0
+}
+
+func (x *ProblemRecord) GetRevision() int64 {
+	if x != nil {
+		return x.xxx_hidden_Revision
+	}
+	return 0
+}
+
+func (x *ProblemRecord) SetContent(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Content = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+}
+
+func (x *ProblemRecord) SetTimestampUnix(v int64) {
+	x.xxx_hidden_TimestampUnix = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+}
+
+func (x *ProblemRecord) SetRevision(v int64) {
+	x.xxx_hidden_Revision = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+}
+
+func (x *ProblemRecord) HasContent() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *ProblemRecord) HasTimestampUnix() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *ProblemRecord) HasRevision() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *ProblemRecord) ClearContent() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_Content = nil
+}
+
+func (x *ProblemRecord) ClearTimestampUnix() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_TimestampUnix = 0
+}
+
+func (x *ProblemRecord) ClearRevision() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_Revision = 0
+}
+
+type ProblemRecord_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Content       []byte
+	TimestampUnix *int64
+	Revision      *int64
+}
+
+func (b0 ProblemRecord_builder) Build() *ProblemRecord {
+	m0 := &ProblemRecord{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Content != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		x.xxx_hidden_Content = b.Content
+	}
+	if b.TimestampUnix != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		x.xxx_hidden_TimestampUnix = *b.TimestampUnix
+	}
+	if b.Revision != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		x.xxx_hidden_Revision = *b.Revision
+	}
+	return m0
+}
+
 type DirectoryEntry struct {
 	state                            protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Blake3Hash            []byte                 `protobuf:"bytes,1,opt,name=blake3_hash,json=blake3Hash"`
@@ -323,7 +569,7 @@ type DirectoryEntry struct {
 
 func (x *DirectoryEntry) Reset() {
 	*x = DirectoryEntry{}
-	mi := &file_protos_proto_msgTypes[2]
+	mi := &file_protos_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +581,7 @@ func (x *DirectoryEntry) String() string {
 func (*DirectoryEntry) ProtoMessage() {}
 
 func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[2]
+	mi := &file_protos_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +733,7 @@ type PathList struct {
 
 func (x *PathList) Reset() {
 	*x = PathList{}
-	mi := &file_protos_proto_msgTypes[3]
+	mi := &file_protos_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -499,7 +745,7 @@ func (x *PathList) String() string {
 func (*PathList) ProtoMessage() {}
 
 func (x *PathList) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[3]
+	mi := &file_protos_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +790,7 @@ type HashEntry struct {
 
 func (x *HashEntry) Reset() {
 	*x = HashEntry{}
-	mi := &file_protos_proto_msgTypes[4]
+	mi := &file_protos_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -556,7 +802,7 @@ func (x *HashEntry) String() string {
 func (*HashEntry) ProtoMessage() {}
 
 func (x *HashEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[4]
+	mi := &file_protos_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -679,7 +925,7 @@ func (b0 HashEntry_builder) Build() *HashEntry {
 type case_HashEntry_State protoreflect.FieldNumber
 
 func (x case_HashEntry_State) String() string {
-	md := file_protos_proto_msgTypes[4].Descriptor()
+	md := file_protos_proto_msgTypes[6].Descriptor()
 	if x == 0 {
 		return "not set"
 	}
@@ -716,7 +962,7 @@ type Asset struct {
 
 func (x *Asset) Reset() {
 	*x = Asset{}
-	mi := &file_protos_proto_msgTypes[5]
+	mi := &file_protos_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -728,7 +974,7 @@ func (x *Asset) String() string {
 func (*Asset) ProtoMessage() {}
 
 func (x *Asset) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[5]
+	mi := &file_protos_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +1134,7 @@ type TestRecord struct {
 
 func (x *TestRecord) Reset() {
 	*x = TestRecord{}
-	mi := &file_protos_proto_msgTypes[6]
+	mi := &file_protos_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +1146,7 @@ func (x *TestRecord) String() string {
 func (*TestRecord) ProtoMessage() {}
 
 func (x *TestRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[6]
+	mi := &file_protos_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1058,7 +1304,7 @@ type TestingRecord struct {
 
 func (x *TestingRecord) Reset() {
 	*x = TestingRecord{}
-	mi := &file_protos_proto_msgTypes[7]
+	mi := &file_protos_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1070,7 +1316,7 @@ func (x *TestingRecord) String() string {
 func (*TestingRecord) ProtoMessage() {}
 
 func (x *TestingRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_protos_proto_msgTypes[7]
+	mi := &file_protos_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1143,7 +1389,14 @@ const file_protos_proto_rawDesc = "" +
 	"\x06sha256\x18\x03 \x01(\fR\x06sha256\"O\n" +
 	"\x0eDigestsAndSize\x12)\n" +
 	"\adigests\x18\x01 \x01(\v2\x0f.protos.DigestsR\adigests\x12\x12\n" +
-	"\x04size\x18\x02 \x01(\x03R\x04size\"\xcc\x01\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\"P\n" +
+	"\rContestRecord\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\fR\acontent\x12%\n" +
+	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"l\n" +
+	"\rProblemRecord\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\fR\acontent\x12%\n" +
+	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\x03R\brevision\"\xcc\x01\n" +
 	"\x0eDirectoryEntry\x12\x1f\n" +
 	"\vblake3_hash\x18\x01 \x01(\fR\n" +
 	"blake3Hash\x12\x1f\n" +
@@ -1181,28 +1434,30 @@ const file_protos_proto_rawDesc = "" +
 	"\aA_WRITE\x10\x02B0Z$github.com/contester/advfiler/protos\x92\x03\a\xd2>\x02\x10\x03 \x03b\beditionsp\xe9\a"
 
 var file_protos_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_protos_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_protos_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_protos_proto_goTypes = []any{
 	(AuthAction)(0),        // 0: protos.AuthAction
 	(*Digests)(nil),        // 1: protos.Digests
 	(*DigestsAndSize)(nil), // 2: protos.DigestsAndSize
-	(*DirectoryEntry)(nil), // 3: protos.DirectoryEntry
-	(*PathList)(nil),       // 4: protos.PathList
-	(*HashEntry)(nil),      // 5: protos.HashEntry
-	(*Asset)(nil),          // 6: protos.Asset
-	(*TestRecord)(nil),     // 7: protos.TestRecord
-	(*TestingRecord)(nil),  // 8: protos.TestingRecord
+	(*ContestRecord)(nil),  // 3: protos.ContestRecord
+	(*ProblemRecord)(nil),  // 4: protos.ProblemRecord
+	(*DirectoryEntry)(nil), // 5: protos.DirectoryEntry
+	(*PathList)(nil),       // 6: protos.PathList
+	(*HashEntry)(nil),      // 7: protos.HashEntry
+	(*Asset)(nil),          // 8: protos.Asset
+	(*TestRecord)(nil),     // 9: protos.TestRecord
+	(*TestingRecord)(nil),  // 10: protos.TestingRecord
 }
 var file_protos_proto_depIdxs = []int32{
 	1, // 0: protos.DigestsAndSize.digests:type_name -> protos.Digests
 	2, // 1: protos.DirectoryEntry.digests_and_size:type_name -> protos.DigestsAndSize
-	4, // 2: protos.HashEntry.inline_paths:type_name -> protos.PathList
-	6, // 3: protos.TestRecord.input:type_name -> protos.Asset
-	6, // 4: protos.TestRecord.output:type_name -> protos.Asset
-	6, // 5: protos.TestRecord.answer:type_name -> protos.Asset
-	6, // 6: protos.TestRecord.tester_output:type_name -> protos.Asset
-	6, // 7: protos.TestingRecord.solution:type_name -> protos.Asset
-	7, // 8: protos.TestingRecord.test:type_name -> protos.TestRecord
+	6, // 2: protos.HashEntry.inline_paths:type_name -> protos.PathList
+	8, // 3: protos.TestRecord.input:type_name -> protos.Asset
+	8, // 4: protos.TestRecord.output:type_name -> protos.Asset
+	8, // 5: protos.TestRecord.answer:type_name -> protos.Asset
+	8, // 6: protos.TestRecord.tester_output:type_name -> protos.Asset
+	8, // 7: protos.TestingRecord.solution:type_name -> protos.Asset
+	9, // 8: protos.TestingRecord.test:type_name -> protos.TestRecord
 	9, // [9:9] is the sub-list for method output_type
 	9, // [9:9] is the sub-list for method input_type
 	9, // [9:9] is the sub-list for extension type_name
@@ -1215,7 +1470,7 @@ func file_protos_proto_init() {
 	if File_protos_proto != nil {
 		return
 	}
-	file_protos_proto_msgTypes[4].OneofWrappers = []any{
+	file_protos_proto_msgTypes[6].OneofWrappers = []any{
 		(*hashEntry_InlinePaths)(nil),
 		(*hashEntry_Refcount)(nil),
 	}
@@ -1225,7 +1480,7 @@ func file_protos_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_protos_proto_rawDesc), len(file_protos_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
