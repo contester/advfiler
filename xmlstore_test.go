@@ -155,3 +155,11 @@ func TestProblemKeyOrdering(t *testing.T) {
 		t.Fatalf("expected key(rev=2) < key(rev=10)")
 	}
 }
+
+func TestSetProblemNegativeRevision(t *testing.T) {
+	s := newTestStore(t)
+	err := s.SetProblem(context.Background(), "k", -1, []byte("x"), 0)
+	if err == nil {
+		t.Fatal("expected error for negative revision")
+	}
+}

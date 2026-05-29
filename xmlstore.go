@@ -82,6 +82,9 @@ func (s *Store) GetContest(ctx context.Context, key string) (content []byte, ts 
 // SetProblem stores (or overwrites) one revision of a problem.
 // ts == 0 means "use the current time".
 func (s *Store) SetProblem(ctx context.Context, key string, revision int64, content []byte, ts int64) error {
+	if revision < 0 {
+		return fmt.Errorf("revision must be non-negative, got %d", revision)
+	}
 	rec := pb.ProblemRecord_builder{
 		Content:       content,
 		TimestampUnix: proto.Int64(nowIfZero(ts)),
@@ -115,7 +118,6 @@ func (s *Store) GetLatestProblem(ctx context.Context, key string) (content []byt
 	err = s.db.View(func(tx *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.Reverse = true
-		opts.Prefix = prefix
 		it := tx.NewIterator(opts)
 		defer it.Close()
 
