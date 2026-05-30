@@ -33,7 +33,7 @@ func parseTimestampHeader(r *http.Request) int64 {
 }
 
 func (x *xmlServer) handleContest(w http.ResponseWriter, r *http.Request) {
-	key := r.FormValue("key")
+	key := r.URL.Query().Get("key")
 	if key == "" {
 		http.Error(w, "missing key", http.StatusBadRequest)
 		return
@@ -79,7 +79,7 @@ func (x *xmlServer) handleContest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (x *xmlServer) handleProblem(w http.ResponseWriter, r *http.Request) {
-	key := r.FormValue("key")
+	key := r.URL.Query().Get("key")
 	if key == "" {
 		http.Error(w, "missing key", http.StatusBadRequest)
 		return
@@ -92,7 +92,7 @@ func (x *xmlServer) handleProblem(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		rev, err := strconv.ParseInt(r.FormValue("revision"), 10, 64)
+		rev, err := strconv.ParseInt(r.URL.Query().Get("revision"), 10, 64)
 		if err != nil || rev < 0 {
 			http.Error(w, "missing or invalid revision", http.StatusBadRequest)
 			return
@@ -117,7 +117,7 @@ func (x *xmlServer) handleProblem(w http.ResponseWriter, r *http.Request) {
 			rev, ts int64
 			err     error
 		)
-		if revStr := r.FormValue("revision"); revStr != "" {
+		if revStr := r.URL.Query().Get("revision"); revStr != "" {
 			rev, err = strconv.ParseInt(revStr, 10, 64)
 			if err != nil || rev < 0 {
 				http.Error(w, "invalid revision", http.StatusBadRequest)
